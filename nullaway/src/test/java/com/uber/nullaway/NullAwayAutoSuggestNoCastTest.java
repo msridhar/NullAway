@@ -24,6 +24,7 @@ package com.uber.nullaway;
 
 import com.google.errorprone.BugCheckerRefactoringTestHelper;
 import com.google.errorprone.ErrorProneFlags;
+import java.io.IOException;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -56,7 +57,7 @@ public class NullAwayAutoSuggestNoCastTest {
   }
 
   @Test
-  public void suggestSuppressionWithComment() {
+  public void suggestSuppressionWithComment() throws IOException {
     BugCheckerRefactoringTestHelper bcr =
         BugCheckerRefactoringTestHelper.newInstance(new NullAway(flags), getClass());
 
@@ -81,7 +82,7 @@ public class NullAwayAutoSuggestNoCastTest {
   }
 
   @Test
-  public void suggestSuppressionWithoutComment() {
+  public void suggestSuppressionWithoutComment() throws IOException {
     BugCheckerRefactoringTestHelper bcr =
         BugCheckerRefactoringTestHelper.newInstance(
             new NullAway(flagsNoAutoFixSuppressionComment), getClass());
@@ -107,7 +108,7 @@ public class NullAwayAutoSuggestNoCastTest {
   }
 
   @Test
-  public void suggestSuppressionFieldLambdaDeref() {
+  public void suggestSuppressionFieldLambdaDeref() throws IOException {
     BugCheckerRefactoringTestHelper bcr =
         BugCheckerRefactoringTestHelper.newInstance(
             new NullAway(flagsNoAutoFixSuppressionComment), getClass());
@@ -140,7 +141,7 @@ public class NullAwayAutoSuggestNoCastTest {
   }
 
   @Test
-  public void suggestSuppressionFieldLambdaUnbox() {
+  public void suggestSuppressionFieldLambdaUnbox() throws IOException {
     BugCheckerRefactoringTestHelper bcr =
         BugCheckerRefactoringTestHelper.newInstance(
             new NullAway(flagsNoAutoFixSuppressionComment), getClass());
@@ -175,7 +176,7 @@ public class NullAwayAutoSuggestNoCastTest {
   }
 
   @Test
-  public void suggestSuppressionFieldLambdaAssignment() {
+  public void suggestSuppressionFieldLambdaAssignment() throws IOException {
     BugCheckerRefactoringTestHelper bcr =
         BugCheckerRefactoringTestHelper.newInstance(
             new NullAway(flagsNoAutoFixSuppressionComment), getClass());
@@ -210,7 +211,7 @@ public class NullAwayAutoSuggestNoCastTest {
   }
 
   @Test
-  public void suggestLambdaAssignInMethod() {
+  public void suggestLambdaAssignInMethod() throws IOException {
     BugCheckerRefactoringTestHelper bcr =
         BugCheckerRefactoringTestHelper.newInstance(
             new NullAway(flagsNoAutoFixSuppressionComment), getClass());
@@ -250,7 +251,7 @@ public class NullAwayAutoSuggestNoCastTest {
   }
 
   @Test
-  public void suppressMethodRefOverrideParam() {
+  public void suppressMethodRefOverrideParam() throws IOException {
     BugCheckerRefactoringTestHelper bcr =
         BugCheckerRefactoringTestHelper.newInstance(
             new NullAway(flagsNoAutoFixSuppressionComment), getClass());
@@ -289,7 +290,7 @@ public class NullAwayAutoSuggestNoCastTest {
   }
 
   @Test
-  public void suppressMethodRefOverrideReturn() {
+  public void suppressMethodRefOverrideReturn() throws IOException {
     BugCheckerRefactoringTestHelper bcr =
         BugCheckerRefactoringTestHelper.newInstance(
             new NullAway(flagsNoAutoFixSuppressionComment), getClass());
