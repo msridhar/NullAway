@@ -78,6 +78,16 @@ public class ReadBeforeInitNegativeCases {
     }
   }
 
+  class T4 {
+
+    private final Boolean b;
+
+    T4(Boolean b1) {
+      this.b = b1;
+      this.b.toString();
+    }
+  }
+
   static class StaticStuff {
 
     static Object f;
