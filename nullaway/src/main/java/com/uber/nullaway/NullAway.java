@@ -22,14 +22,6 @@
 
 package com.uber.nullaway;
 
-import static com.google.errorprone.BugPattern.SeverityLevel.WARNING;
-import static com.sun.source.tree.Tree.Kind.EXPRESSION_STATEMENT;
-import static com.sun.source.tree.Tree.Kind.IDENTIFIER;
-import static com.sun.source.tree.Tree.Kind.OTHER;
-import static com.sun.source.tree.Tree.Kind.PARENTHESIZED;
-import static com.sun.source.tree.Tree.Kind.TYPE_CAST;
-import static com.uber.nullaway.ErrorBuilder.errMsgForInitializer;
-
 import com.google.auto.service.AutoService;
 import com.google.auto.value.AutoValue;
 import com.google.common.base.Preconditions;
@@ -92,6 +84,16 @@ import com.uber.nullaway.dataflow.AccessPathNullnessAnalysis;
 import com.uber.nullaway.dataflow.EnclosingEnvironmentNullness;
 import com.uber.nullaway.handlers.Handler;
 import com.uber.nullaway.handlers.Handlers;
+import org.checkerframework.dataflow.cfg.node.MethodInvocationNode;
+import org.checkerframework.javacutil.AnnotationUtils;
+
+import javax.annotation.Nullable;
+import javax.lang.model.element.AnnotationMirror;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.NestingKind;
+import javax.lang.model.type.TypeKind;
 import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -103,15 +105,14 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
-import javax.annotation.Nullable;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.NestingKind;
-import javax.lang.model.type.TypeKind;
-import org.checkerframework.dataflow.cfg.node.MethodInvocationNode;
-import org.checkerframework.javacutil.AnnotationUtils;
+
+import static com.google.errorprone.BugPattern.SeverityLevel.WARNING;
+import static com.sun.source.tree.Tree.Kind.EXPRESSION_STATEMENT;
+import static com.sun.source.tree.Tree.Kind.IDENTIFIER;
+import static com.sun.source.tree.Tree.Kind.OTHER;
+import static com.sun.source.tree.Tree.Kind.PARENTHESIZED;
+import static com.sun.source.tree.Tree.Kind.TYPE_CAST;
+import static com.uber.nullaway.ErrorBuilder.errMsgForInitializer;
 
 /**
  * Checker for nullability errors. It assumes that any field, method parameter, or return type that
@@ -419,7 +420,7 @@ public class NullAway extends BugChecker
           new ErrorMessage(MessageTypes.ASSIGN_FIELD_NULLABLE, message),
           expression,
           state.getPath(),
-          buildDescription(tree));
+          buildDescription(tree),state);
     }
     return Description.NO_MATCH;
   }
@@ -516,7 +517,7 @@ public class NullAway extends BugChecker
           new ErrorMessage(MessageTypes.SWITCH_EXPRESSION_NULLABLE, message);
 
       return errorBuilder.createErrorDescription(
-          errorMessage, switchExpression, buildDescription(switchExpression));
+          errorMessage, switchExpression, buildDescription(switchExpression),state);
     }
 
     return Description.NO_MATCH;
@@ -572,7 +573,7 @@ public class NullAway extends BugChecker
         return errorBuilder.createErrorDescription(
             new ErrorMessage(MessageTypes.WRONG_OVERRIDE_PARAM, message),
             state.getPath(),
-            buildDescription(memberReferenceTree));
+            buildDescription(memberReferenceTree),state);
       }
     }
     // for unbound member references, we need to adjust parameter indices by 1 when matching with
@@ -630,7 +631,7 @@ public class NullAway extends BugChecker
         return errorBuilder.createErrorDescription(
             new ErrorMessage(MessageTypes.WRONG_OVERRIDE_PARAM, message),
             state.getPath(),
-            buildDescription(errorTree));
+            buildDescription(errorTree),state);
       }
     }
     return Description.NO_MATCH;
@@ -661,7 +662,7 @@ public class NullAway extends BugChecker
               "returning @Nullable expression from method with @NonNull return type");
 
       return errorBuilder.createErrorDescriptionForNullAssignment(
-          errorMessage, retExpr, state.getPath(), buildDescription(tree));
+          errorMessage, retExpr, state.getPath(), buildDescription(tree),state);
     }
     return Description.NO_MATCH;
   }
@@ -770,7 +771,7 @@ public class NullAway extends BugChecker
       return errorBuilder.createErrorDescription(
           new ErrorMessage(MessageTypes.WRONG_OVERRIDE_RETURN, message),
           state.getPath(),
-          buildDescription(errorTree));
+          buildDescription(errorTree),state);
     }
     // if any parameter in the super method is annotated @Nullable,
     // overriding method cannot assume @Nonnull
@@ -896,7 +897,7 @@ public class NullAway extends BugChecker
           new ErrorMessage(
               MessageTypes.NONNULL_FIELD_READ_BEFORE_INIT,
               "read of @NonNull field " + symbol + " before initialization");
-      return errorBuilder.createErrorDescription(errorMessage, path, buildDescription(tree));
+      return errorBuilder.createErrorDescription(errorMessage, path, buildDescription(tree),state);
     } else {
       return Description.NO_MATCH;
     }
@@ -1136,7 +1137,7 @@ public class NullAway extends BugChecker
                   MessageTypes.ASSIGN_FIELD_NULLABLE,
                   "assigning @Nullable expression to @NonNull field");
           return errorBuilder.createErrorDescriptionForNullAssignment(
-              errorMessage, initializer, state.getPath(), buildDescription(tree));
+              errorMessage, initializer, state.getPath(), buildDescription(tree),state);
         }
       }
     }
@@ -1258,7 +1259,7 @@ public class NullAway extends BugChecker
             "enhanced-for expression " + state.getSourceForNode(expr) + " is @Nullable");
     if (mayBeNullExpr(state, expr)) {
       return errorBuilder.createErrorDescription(
-          errorMessage, state.getPath(), buildDescription(expr));
+          errorMessage, state.getPath(), buildDescription(expr),state);
     }
     return Description.NO_MATCH;
   }
@@ -1281,7 +1282,7 @@ public class NullAway extends BugChecker
           final ErrorMessage errorMessage =
               new ErrorMessage(MessageTypes.UNBOX_NULLABLE, "unboxing of a @Nullable value");
           return errorBuilder.createErrorDescription(
-              errorMessage, state.getPath(), buildDescription(tree));
+              errorMessage, state.getPath(), buildDescription(tree),state);
         }
       }
     }
@@ -1373,11 +1374,13 @@ public class NullAway extends BugChecker
             "passing @Nullable parameter '"
                 + state.getSourceForNode(actual)
                 + "' where @NonNull is required";
+        errorBuilder.methodSymbol=methodSymbol;
+        errorBuilder.paramPos=argPos;
         return errorBuilder.createErrorDescriptionForNullAssignment(
             new ErrorMessage(MessageTypes.PASS_NULLABLE, message),
             actual,
             state.getPath(),
-            buildDescription(actual));
+            buildDescription(actual),state);
       }
     }
     // Check for @NonNull being passed to castToNonNull (if configured)
@@ -1422,7 +1425,7 @@ public class NullAway extends BugChecker
         return errorBuilder.createErrorDescription(
             new ErrorMessage(MessageTypes.CAST_TO_NONNULL_ARG_NONNULL, message),
             tree,
-            buildDescription(tree));
+            buildDescription(tree),state);
       }
     }
     return Description.NO_MATCH;
@@ -2040,7 +2043,7 @@ public class NullAway extends BugChecker
       ErrorMessage errorMessage = new ErrorMessage(MessageTypes.DEREFERENCE_NULLABLE, message);
 
       return errorBuilder.createErrorDescriptionForNullAssignment(
-          errorMessage, baseExpression, state.getPath(), buildDescription(derefExpression));
+          errorMessage, baseExpression, state.getPath(), buildDescription(derefExpression),state);
     }
 
     Optional<ErrorMessage> handlerErrorMessage =
@@ -2050,7 +2053,7 @@ public class NullAway extends BugChecker
           handlerErrorMessage.get(),
           derefExpression,
           state.getPath(),
-          buildDescription(derefExpression));
+          buildDescription(derefExpression),state);
     }
 
     return Description.NO_MATCH;

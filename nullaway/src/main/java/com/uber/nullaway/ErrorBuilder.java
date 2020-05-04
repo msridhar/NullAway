@@ -22,12 +22,7 @@
 
 package com.uber.nullaway;
 
-import static com.uber.nullaway.ErrorMessage.MessageTypes.FIELD_NO_INIT;
-import static com.uber.nullaway.ErrorMessage.MessageTypes.GET_ON_EMPTY_OPTIONAL;
-import static com.uber.nullaway.ErrorMessage.MessageTypes.METHOD_NO_INIT;
-import static com.uber.nullaway.NullAway.INITIALIZATION_CHECK_NAME;
-import static com.uber.nullaway.NullAway.OPTIONAL_CHECK_NAME;
-import static com.uber.nullaway.NullAway.getTreesInstance;
+
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Iterables;
@@ -45,11 +40,24 @@ import com.sun.source.tree.Tree;
 import com.sun.source.tree.VariableTree;
 import com.sun.source.util.TreePath;
 import com.sun.tools.javac.code.Symbol;
+import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
+import com.sun.tools.javac.util.DiagnosticSource;
+import com.sun.tools.javac.util.JCDiagnostic.DiagnosticPosition;
+
+import javax.annotation.Nullable;
+import javax.lang.model.element.Element;
+import javax.tools.JavaFileObject;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.StreamSupport;
-import javax.annotation.Nullable;
-import javax.lang.model.element.Element;
+
+import static com.uber.nullaway.ErrorMessage.MessageTypes.FIELD_NO_INIT;
+import static com.uber.nullaway.ErrorMessage.MessageTypes.GET_ON_EMPTY_OPTIONAL;
+import static com.uber.nullaway.ErrorMessage.MessageTypes.METHOD_NO_INIT;
+import static com.uber.nullaway.NullAway.INITIALIZATION_CHECK_NAME;
+import static com.uber.nullaway.NullAway.OPTIONAL_CHECK_NAME;
+import static com.uber.nullaway.NullAway.getTreesInstance;
 
 /** A class to construct error message to be displayed after the analysis finds error. */
 public class ErrorBuilder {
@@ -61,6 +69,10 @@ public class ErrorBuilder {
 
   /** Additional identifiers for this check, to be checked for in @SuppressWarnings annotations. */
   private final Set<String> allNames;
+
+  /** Method symbol and paramPos for PASS_NULLABLE*/
+  public Symbol methodSymbol;
+  public int paramPos;
 
   ErrorBuilder(Config config, String suppressionName, Set<String> allNames) {
     this.config = config;
@@ -78,9 +90,9 @@ public class ErrorBuilder {
    * @return the error description
    */
   Description createErrorDescription(
-      ErrorMessage errorMessage, TreePath path, Description.Builder descriptionBuilder) {
+      ErrorMessage errorMessage, TreePath path, Description.Builder descriptionBuilder, VisitorState state) {
     Tree enclosingSuppressTree = suppressibleNode(path);
-    return createErrorDescription(errorMessage, enclosingSuppressTree, descriptionBuilder);
+    return createErrorDescription(errorMessage, enclosingSuppressTree, descriptionBuilder, state);
   }
 
   /**
@@ -94,14 +106,14 @@ public class ErrorBuilder {
   public Description createErrorDescription(
       ErrorMessage errorMessage,
       @Nullable Tree suggestTree,
-      Description.Builder descriptionBuilder) {
+      Description.Builder descriptionBuilder, VisitorState state) {
     Description.Builder builder = descriptionBuilder.setMessage(errorMessage.message);
     if (isOptionalTypeErrorAndSuppressed(errorMessage, suggestTree)) {
       return Description.NO_MATCH;
     }
 
     if (config.suggestSuppressions() && suggestTree != null) {
-      builder = addSuggestedSuppression(errorMessage, suggestTree, builder);
+      builder = addSuggestedSuppression(errorMessage, suggestTree, builder, state);
     }
     // #letbuildersbuild
     return builder.build();
@@ -117,11 +129,15 @@ public class ErrorBuilder {
   }
 
   private Description.Builder addSuggestedSuppression(
-      ErrorMessage errorMessage, Tree suggestTree, Description.Builder builder) {
+      ErrorMessage errorMessage, Tree suggestTree, Description.Builder builder, VisitorState state) {
     switch (errorMessage.messageType) {
       case DEREFERENCE_NULLABLE:
       case RETURN_NULLABLE:
+        builder = addReturnNullableFix(suggestTree, builder);
+        break;
       case PASS_NULLABLE:
+        builder = addPassNullableFix(suggestTree,builder,state);
+        break;
       case ASSIGN_FIELD_NULLABLE:
       case SWITCH_EXPRESSION_NULLABLE:
         if (config.getCastToNonNullMethod() != null) {
@@ -151,6 +167,64 @@ public class ErrorBuilder {
     return builder;
   }
 
+  Description.Builder addPassNullableFix(Tree suggestTree, Description.Builder builder,VisitorState state){
+    Symbol dereferenced = methodSymbol;
+    Tree paramDecl = findParamDeclaration(state,dereferenced);
+    if(paramDecl==null) return null;// TODO: 4/23/2020 check is it good
+    SuggestedFix fix;
+    final ModifiersTree modifiers =
+            (paramDecl instanceof MethodTree)
+                    ? ((MethodTree) paramDecl).getModifiers()
+                    : ((VariableTree) paramDecl).getModifiers();
+    final List<? extends AnnotationTree> annotations = modifiers.getAnnotations();
+    // noinspection ConstantConditions
+    com.google.common.base.Optional<? extends AnnotationTree> nonNullAnnot =
+            Iterables.tryFind(
+                    annotations,
+                    annot -> annot.getAnnotationType().toString().endsWith("Nonnull"));
+    if(!nonNullAnnot.isPresent()){
+      fix =
+              SuggestedFix.prefixWith(
+                      paramDecl,
+                      "@Nullable ");
+    }else{
+      final String replacement = "@Nullable";
+      fix = SuggestedFix.replace(nonNullAnnot.get(), replacement);
+    }
+    return builder.addFix(fix);
+  }
+
+  Tree findParamDeclaration(VisitorState state, Symbol parameter){
+    MethodTree methodTree = (MethodTree)getTreesInstance(state).getTree(parameter);
+    Tree paramTree=methodTree.getParameters().get(paramPos);
+    //throw new AssertionError(parameter.toString());
+    return paramTree;
+  }
+
+  Description.Builder addReturnNullableFix(Tree suggestTree, Description.Builder builder){
+    SuggestedFix fix;
+    final ModifiersTree modifiers =
+            (suggestTree instanceof MethodTree)
+                    ? ((MethodTree) suggestTree).getModifiers()
+                    : ((VariableTree) suggestTree).getModifiers();
+    final List<? extends AnnotationTree> annotations = modifiers.getAnnotations();
+    // noinspection ConstantConditions
+    com.google.common.base.Optional<? extends AnnotationTree> nonNullAnnot =
+            Iterables.tryFind(
+                    annotations,
+                    annot -> annot.getAnnotationType().toString().endsWith("Nonnull"));
+    if(!nonNullAnnot.isPresent()){
+      fix =
+              SuggestedFix.prefixWith(
+                      suggestTree,
+                      "@Nullable ");
+    }else{
+       final String replacement = "@Nullable";
+       fix = SuggestedFix.replace(nonNullAnnot.get(), replacement);
+    }
+    return builder.addFix(fix);
+  }
+
   /**
    * create an error description for a generalized @Nullable value to @NonNull location assignment.
    *
@@ -166,15 +240,17 @@ public class ErrorBuilder {
    * @return the error description.
    */
   Description createErrorDescriptionForNullAssignment(
-      ErrorMessage errorMessage,
-      @Nullable Tree suggestTreeIfCastToNonNull,
-      @Nullable TreePath suggestTreePathIfSuppression,
-      Description.Builder descriptionBuilder) {
+          ErrorMessage errorMessage,
+          @Nullable Tree suggestTreeIfCastToNonNull,
+          @Nullable TreePath suggestTreePathIfSuppression,
+          Description.Builder descriptionBuilder, VisitorState state) {
     final Tree enclosingSuppressTree = suppressibleNode(suggestTreePathIfSuppression);
+    // is it passing nullable
+
     if (config.getCastToNonNullMethod() != null) {
-      return createErrorDescription(errorMessage, suggestTreeIfCastToNonNull, descriptionBuilder);
+      return createErrorDescription(errorMessage, suggestTreeIfCastToNonNull, descriptionBuilder,state);
     } else {
-      return createErrorDescription(errorMessage, enclosingSuppressTree, descriptionBuilder);
+      return createErrorDescription(errorMessage, enclosingSuppressTree, descriptionBuilder,state);
     }
   }
 
@@ -285,7 +361,7 @@ public class ErrorBuilder {
     Tree methodTree = getTreesInstance(state).getTree(methodSymbol);
     state.reportMatch(
         createErrorDescription(
-            new ErrorMessage(METHOD_NO_INIT, message), methodTree, descriptionBuilder));
+            new ErrorMessage(METHOD_NO_INIT, message), methodTree, descriptionBuilder,state));
   }
 
   boolean symbolHasSuppressWarningsAnnotation(Symbol symbol, String suppression) {
@@ -302,38 +378,54 @@ public class ErrorBuilder {
     return false;
   }
 
-  int GetLineforField(Element uninitField, VisitorState state){
-    Tree fieldTree = getTreeInstance(state).getTree(uninitField);
-    DiagnosticPosition position = (DiagnosticPosition)fieldTree;
+  static int getLineNumForElement(Element uninitField, VisitorState state) {
+    Tree tree = getTreesInstance(state).getTree(uninitField);
+    if (tree == null)
+      throw new RuntimeException(
+          "When getting the line number for uninitialized field, can't get the tree from the element.");
+    DiagnosticPosition position =
+        (DiagnosticPosition) tree; // Expect Tree to be JCTree and thus implement DiagnosticPosition
     TreePath path = state.getPath();
-    JCCompilationUnit compilation = (JCCompilationUnit)path.getCompilationUnit();
+    JCCompilationUnit compilation = (JCCompilationUnit) path.getCompilationUnit();
     JavaFileObject file = compilation.getSourceFile();
     DiagnosticSource source = new DiagnosticSource(file, null);
     return source.getLineNumber(position.getStartPosition());
   }
-  
+
+  /**
+   * Generate the message for uninitialized fields, including the line number for fields.
+   *
+   * @param uninitFields the set of uninitialized fields as the type of Element.
+   * @param state the VisitorState object.
+   * @return the error message for uninitialized fields with line numbers.
+   */
   static String errMsgForInitializer(Set<Element> uninitFields, VisitorState state) {
-    String message = "initializer method does not guarantee @NonNull ";
+    StringBuilder message = new StringBuilder("initializer method does not guarantee @NonNull ");
     Element uninitField;
     if (uninitFields.size() == 1) {
-      message += "field " + uninitFields.iterator().next().toString() + " is initialized";
       uninitField = uninitFields.iterator().next();
-      message += "field " + uninitField.toString() + "(Line:" + GetLineforField(uninitField, state) + ") is initialized";
+      message.append("field ");
+      message.append(uninitField.toString());
+      message.append(" (line ");
+      message.append(getLineNumForElement(uninitField, state));
+      message.append(") is initialized");
     } else {
-      message += "fields " + Joiner.on(", ").join(uninitFields) + " are initialized";
-      message += "fields ";
-      while(uninitFields.hasNext()){
-        uninitField = uninitFields.iterator().next();
-        message += uninitField.toString() + "(Line:" + GetLineforField(uninitField, state) + ")";
-        if(uninitFields.hasNext()){
-          message += ", ";
-        }else{
-          message += " are initialized";
+      message.append("fields ");
+      Iterator<Element> it = uninitFields.iterator();
+      while (it.hasNext()) {
+        uninitField = it.next();
+        message.append(
+            uninitField.toString() + " (line " + getLineNumForElement(uninitField, state) + ")");
+        if (it.hasNext()) {
+          message.append(", ");
+        } else {
+          message.append(" are initialized");
         }
       }
     }
-    message += " along all control-flow paths (remember to check for exceptions or early returns).";
-    return message;
+    message.append(
+        " along all control-flow paths (remember to check for exceptions or early returns).");
+    return message.toString();
   }
 
   void reportInitErrorOnField(Symbol symbol, VisitorState state, Description.Builder builder) {
@@ -341,19 +433,28 @@ public class ErrorBuilder {
       return;
     }
     Tree tree = getTreesInstance(state).getTree(symbol);
+
+    String fieldName = symbol.toString();
+
+    if (symbol.enclClass().getNestingKind().isNested()) {
+      String flatName = symbol.enclClass().flatName().toString();
+      int index = flatName.lastIndexOf(".") + 1;
+      fieldName = flatName.substring(index) + "." + fieldName;
+    }
+
     if (symbol.isStatic()) {
       state.reportMatch(
           createErrorDescription(
               new ErrorMessage(
-                  FIELD_NO_INIT, "@NonNull static field " + symbol + " not initialized"),
+                  FIELD_NO_INIT, "@NonNull static field " + fieldName + " not initialized"),
               tree,
-              builder));
+              builder,state));
     } else {
       state.reportMatch(
           createErrorDescription(
-              new ErrorMessage(FIELD_NO_INIT, "@NonNull field " + symbol + " not initialized"),
+              new ErrorMessage(FIELD_NO_INIT, "@NonNull field " + fieldName + " not initialized"),
               tree,
-              builder));
+              builder,state));
     }
   }
 }
