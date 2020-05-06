@@ -22,8 +22,6 @@
 
 package com.uber.nullaway.handlers;
 
-import static com.google.errorprone.BugCheckerInfo.buildDescriptionFromChecker;
-
 import com.google.common.base.Preconditions;
 import com.google.errorprone.VisitorState;
 import com.google.errorprone.util.ASTHelpers;
@@ -37,7 +35,8 @@ import com.uber.nullaway.NullAway;
 import com.uber.nullaway.Nullness;
 import com.uber.nullaway.dataflow.AccessPath;
 import com.uber.nullaway.dataflow.AccessPathNullnessPropagation;
-import java.util.Map;
+import org.checkerframework.dataflow.cfg.node.MethodInvocationNode;
+
 import javax.annotation.Nullable;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
@@ -45,7 +44,9 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
-import org.checkerframework.dataflow.cfg.node.MethodInvocationNode;
+import java.util.Map;
+
+import static com.google.errorprone.BugCheckerInfo.buildDescriptionFromChecker;
 
 /**
  * This Handler parses the jetbrains @Contract annotation and honors the nullness spec defined there
@@ -228,7 +229,7 @@ public class ContractHandler extends BaseNoOpHandler {
               .createErrorDescription(
                   new ErrorMessage(ErrorMessage.MessageTypes.ANNOTATION_VALUE_INVALID, message),
                   errorLocTree,
-                  buildDescriptionFromChecker(errorLocTree, analysis)));
+                  buildDescriptionFromChecker(errorLocTree, analysis),state));
     }
   }
 
