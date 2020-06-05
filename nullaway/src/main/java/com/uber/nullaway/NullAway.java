@@ -86,6 +86,7 @@ import com.uber.nullaway.handlers.Handler;
 import com.uber.nullaway.handlers.Handlers;
 import org.checkerframework.dataflow.cfg.node.MethodInvocationNode;
 import org.checkerframework.javacutil.AnnotationUtils;
+//import sun.security.krb5.internal.crypto.Des;
 
 import javax.annotation.Nullable;
 import javax.lang.model.element.AnnotationMirror;
@@ -113,6 +114,8 @@ import static com.sun.source.tree.Tree.Kind.OTHER;
 import static com.sun.source.tree.Tree.Kind.PARENTHESIZED;
 import static com.sun.source.tree.Tree.Kind.TYPE_CAST;
 import static com.uber.nullaway.ErrorBuilder.errMsgForInitializer;
+import static com.uber.nullaway.ErrorMessage.MessageTypes.METHOD_NO_INIT;
+import static com.uber.nullaway.ErrorMessage.MessageTypes.PASS_NULLABLE;
 
 /**
  * Checker for nullability errors. It assumes that any field, method parameter, or return type that
@@ -1348,8 +1351,10 @@ public class NullAway extends BugChecker
     // NOTE: the case of an invocation on a possibly-null reference
     // is handled by matchMemberSelect()
     for (int argPos : nonNullPositions) {
+      Tree formal = null;
       ExpressionTree actual = null;
       boolean mayActualBeNull = false;
+      MethodTree methodTree = (MethodTree)getTreesInstance(state).getTree(methodSymbol);
       if (argPos == formalParams.size() - 1 && methodSymbol.isVarArgs()) {
         // Check all vararg actual arguments for nullability
         if (actualParams.size() <= argPos) {
@@ -1357,6 +1362,8 @@ public class NullAway extends BugChecker
         }
         for (ExpressionTree arg : actualParams.subList(argPos, actualParams.size())) {
           actual = arg;
+          if(methodTree!=null)
+            formal=methodTree.getParameters().get(argPos);
           mayActualBeNull = mayBeNullExpr(state, actual);
           if (mayActualBeNull) {
             break;
@@ -1364,6 +1371,8 @@ public class NullAway extends BugChecker
         }
       } else {
         actual = actualParams.get(argPos);
+        if(methodTree!=null)
+          formal=methodTree.getParameters().get(argPos);
         mayActualBeNull = mayBeNullExpr(state, actual);
       }
       // This statement should be unreachable without assigning actual beforehand:
@@ -1376,11 +1385,17 @@ public class NullAway extends BugChecker
                 + "' where @NonNull is required";
         errorBuilder.methodSymbol=methodSymbol;
         errorBuilder.paramPos=argPos;
-        return errorBuilder.createErrorDescriptionForNullAssignment(
-            new ErrorMessage(MessageTypes.PASS_NULLABLE, message),
-            actual,
-            state.getPath(),
-            buildDescription(actual),state);
+        // do state.reportmatch
+        state.reportMatch(
+                errorBuilder.createErrorDescriptionForNullAssignment(
+                        new ErrorMessage(PASS_NULLABLE, message), methodTree,state.getPath(), buildDescription(formal),state));
+        //return Description.nomatch
+        return Description.NO_MATCH;
+//        return errorBuilder.createErrorDescriptionForNullAssignment(
+//            new ErrorMessage(MessageTypes.PASS_NULLABLE, message),
+//            actual,
+//            state.getPath(),
+//            buildDescription(formal),state);
       }
     }
     // Check for @NonNull being passed to castToNonNull (if configured)

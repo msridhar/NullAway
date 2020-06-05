@@ -25,9 +25,11 @@ package com.uber.nullaway;
 
 
 import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.errorprone.VisitorState;
+import com.google.errorprone.fixes.Fix;
 import com.google.errorprone.fixes.SuggestedFix;
 import com.google.errorprone.matchers.Description;
 import com.google.errorprone.util.ASTHelpers;
@@ -136,7 +138,13 @@ public class ErrorBuilder {
         builder = addReturnNullableFix(suggestTree, builder);
         break;
       case PASS_NULLABLE:
+        //String s="";
         builder = addPassNullableFix(suggestTree,builder,state);
+        //ImmutableList<Fix> f=builder.build().fixes;
+        //for(int i=0;i<f.size();i++){
+        //  s+=f.get(i).toString()+"/";
+        //}
+        //throw new RuntimeException();
         break;
       case ASSIGN_FIELD_NULLABLE:
       case SWITCH_EXPRESSION_NULLABLE:
@@ -187,6 +195,7 @@ public class ErrorBuilder {
               SuggestedFix.prefixWith(
                       paramDecl,
                       "@Nullable ");
+      if(fix==null) throw new RuntimeException("here");
     }else{
       final String replacement = "@Nullable";
       fix = SuggestedFix.replace(nonNullAnnot.get(), replacement);
@@ -197,7 +206,8 @@ public class ErrorBuilder {
   Tree findParamDeclaration(VisitorState state, Symbol parameter){
     MethodTree methodTree = (MethodTree)getTreesInstance(state).getTree(parameter);
     Tree paramTree=methodTree.getParameters().get(paramPos);
-    //throw new AssertionError(parameter.toString());
+    //paramTree.toString();
+    //throw new AssertionError(paramTree.getKind().toString());
     return paramTree;
   }
 
@@ -218,6 +228,7 @@ public class ErrorBuilder {
               SuggestedFix.prefixWith(
                       suggestTree,
                       "@Nullable ");
+
     }else{
        final String replacement = "@Nullable";
        fix = SuggestedFix.replace(nonNullAnnot.get(), replacement);
