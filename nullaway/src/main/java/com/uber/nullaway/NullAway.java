@@ -1386,16 +1386,14 @@ public class NullAway extends BugChecker
         errorBuilder.methodSymbol=methodSymbol;
         errorBuilder.paramPos=argPos;
         // do state.reportmatch
-        state.reportMatch(
-                errorBuilder.createErrorDescriptionForNullAssignment(
-                        new ErrorMessage(PASS_NULLABLE, message), methodTree,state.getPath(), buildDescription(formal),state));
+        if (true) { throw new RuntimeException("formal param " + state.getSourceForNode(formal)); }
+        state.reportMatch(errorBuilder.createErrorDescriptionForNullAssignment(
+                new ErrorMessage(MessageTypes.PASS_NULLABLE, message),
+                actual,
+                state.getPath(),
+                buildDescription(formal),state));
         //return Description.nomatch
         return Description.NO_MATCH;
-//        return errorBuilder.createErrorDescriptionForNullAssignment(
-//            new ErrorMessage(MessageTypes.PASS_NULLABLE, message),
-//            actual,
-//            state.getPath(),
-//            buildDescription(formal),state);
       }
     }
     // Check for @NonNull being passed to castToNonNull (if configured)
