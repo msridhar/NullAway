@@ -23,6 +23,7 @@
 package com.uber.nullaway;
 
 import static com.google.errorprone.BugPattern.SeverityLevel.WARNING;
+import static com.google.errorprone.matchers.Description.NO_MATCH;
 import static com.sun.source.tree.Tree.Kind.EXPRESSION_STATEMENT;
 import static com.sun.source.tree.Tree.Kind.IDENTIFIER;
 import static com.sun.source.tree.Tree.Kind.OTHER;
@@ -301,6 +302,7 @@ public class NullAway extends BugChecker
       case FULLY_MARKED:
         return true;
       case FULLY_UNMARKED:
+        // nullUnmarked scope
         return false;
       case PARTIALLY_MARKED:
         return checkMarkingForPath(state);
@@ -344,13 +346,13 @@ public class NullAway extends BugChecker
   @Override
   public Description matchReturn(ReturnTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     handler.onMatchReturn(this, tree, state);
     ExpressionTree retExpr = tree.getExpression();
     // let's do quick checks on returned expression first
     if (retExpr == null) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     // now let's check the enclosing method
     TreePath enclosingMethodOrLambda =
@@ -380,7 +382,8 @@ public class NullAway extends BugChecker
   @Override
   public Description matchMethodInvocation(MethodInvocationTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      // nullUnmarked scope
+      return NO_MATCH;
     }
     final Symbol.MethodSymbol methodSymbol = ASTHelpers.getSymbol(tree);
     if (methodSymbol == null) {
@@ -395,7 +398,8 @@ public class NullAway extends BugChecker
   @Override
   public Description matchNewClass(NewClassTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      // NullUnmarked
+      return NO_MATCH;
     }
     Symbol.MethodSymbol methodSymbol = ASTHelpers.getSymbol(tree);
     if (methodSymbol == null) {
@@ -453,7 +457,8 @@ public class NullAway extends BugChecker
   @Override
   public Description matchAssignment(AssignmentTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      // nullUnmarked scope
+      return NO_MATCH;
     }
     Type lhsType = ASTHelpers.getType(tree.getVariable());
     if (lhsType != null && lhsType.isPrimitive()) {
@@ -462,12 +467,12 @@ public class NullAway extends BugChecker
     Symbol assigned = ASTHelpers.getSymbol(tree.getVariable());
     if (assigned == null || assigned.getKind() != ElementKind.FIELD) {
       // not a field of nullable type
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
 
     if (Nullness.hasNullableAnnotation(assigned, config)) {
       // field already annotated
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     ExpressionTree expression = tree.getExpression();
     if (mayBeNullExpr(state, expression)) {
@@ -480,13 +485,13 @@ public class NullAway extends BugChecker
           ASTHelpers.getSymbol(tree.getVariable()));
     }
     handler.onNonNullFieldAssignment(assigned, getNullnessAnalysis(state), state);
-    return Description.NO_MATCH;
+    return NO_MATCH;
   }
 
   @Override
   public Description matchCompoundAssignment(CompoundAssignmentTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     Type lhsType = ASTHelpers.getType(tree.getVariable());
     Type stringType = Suppliers.STRING_TYPE.get(state);
@@ -494,16 +499,16 @@ public class NullAway extends BugChecker
       // both LHS and RHS could get unboxed
       return doUnboxingCheck(state, tree.getVariable(), tree.getExpression());
     }
-    return Description.NO_MATCH;
+    return NO_MATCH;
   }
 
   @Override
   public Description matchArrayAccess(ArrayAccessTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     Description description = matchDereference(tree.getExpression(), tree, state);
-    if (!description.equals(Description.NO_MATCH)) {
+    if (!description.equals(NO_MATCH)) {
       return description;
     }
     // also check for unboxing of array index expression
@@ -513,7 +518,7 @@ public class NullAway extends BugChecker
   @Override
   public Description matchMemberSelect(MemberSelectTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     Symbol symbol = ASTHelpers.getSymbol(tree);
     // Some checks for cases where we know this cannot be a null dereference.  The tree's symbol may
@@ -524,11 +529,11 @@ public class NullAway extends BugChecker
         || symbol.getSimpleName().toString().equals("class")
         || symbol.isEnum()
         || isModuleSymbol(symbol)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
 
     Description badDeref = matchDereference(tree.getExpression(), tree, state);
-    if (!badDeref.equals(Description.NO_MATCH)) {
+    if (!badDeref.equals(NO_MATCH)) {
       return badDeref;
     }
     // if we're accessing a field of this, make sure we're not reading the field before init
@@ -536,7 +541,7 @@ public class NullAway extends BugChecker
         && ((IdentifierTree) tree.getExpression()).getName().toString().equals("this")) {
       return checkForReadBeforeInit(tree, state);
     }
-    return Description.NO_MATCH;
+    return NO_MATCH;
   }
 
   /**
@@ -551,7 +556,7 @@ public class NullAway extends BugChecker
   @Override
   public Description matchMethod(MethodTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     // if the method is overriding some other method,
     // check that nullability annotations are consistent with
@@ -568,13 +573,13 @@ public class NullAway extends BugChecker
         return checkOverriding(closestOverriddenMethod, methodSymbol, null, state);
       }
     }
-    return Description.NO_MATCH;
+    return NO_MATCH;
   }
 
   @Override
   public Description matchSwitch(SwitchTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
 
     ExpressionTree switchSelectorExpression = tree.getExpression();
@@ -598,7 +603,7 @@ public class NullAway extends BugChecker
           null);
     }
 
-    return Description.NO_MATCH;
+    return NO_MATCH;
   }
 
   /**
@@ -714,7 +719,7 @@ public class NullAway extends BugChecker
             paramSymbol);
       }
     }
-    return Description.NO_MATCH;
+    return NO_MATCH;
   }
 
   static Trees getTreesInstance(VisitorState state) {
@@ -726,17 +731,17 @@ public class NullAway extends BugChecker
     Type returnType = methodSymbol.getReturnType();
     if (returnType.isPrimitiveOrVoid()) {
       // check for unboxing
-      return returnType.isPrimitive() ? doUnboxingCheck(state, retExpr) : Description.NO_MATCH;
+      return returnType.isPrimitive() ? doUnboxingCheck(state, retExpr) : NO_MATCH;
     }
     if (ASTHelpers.isSameType(returnType, Suppliers.JAVA_LANG_VOID_TYPE.get(state), state)) {
       // Temporarily treat a Void return type as if it were @Nullable Void.  Change this once
       // we are confident that all use cases can be type checked reasonably (may require generics
       // support)
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     if (classAnnotationInfo.isSymbolUnannotated(methodSymbol, config)
         || Nullness.hasNullableAnnotation(methodSymbol, config)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     if (mayBeNullExpr(state, retExpr)) {
       return errorBuilder.createErrorDescriptionForNullAssignment(
@@ -748,13 +753,13 @@ public class NullAway extends BugChecker
           state,
           methodSymbol);
     }
-    return Description.NO_MATCH;
+    return NO_MATCH;
   }
 
   @Override
   public Description matchLambdaExpression(LambdaExpressionTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     Symbol.MethodSymbol funcInterfaceMethod =
         NullabilityUtil.getFunctionalInterfaceMethod(tree, state.getTypes());
@@ -763,7 +768,7 @@ public class NullAway extends BugChecker
     updateEnvironmentMapping(tree, state);
     handler.onMatchLambdaExpression(this, tree, state, funcInterfaceMethod);
     if (classAnnotationInfo.isSymbolUnannotated(funcInterfaceMethod, config)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     Description description =
         checkParamOverriding(
@@ -772,7 +777,7 @@ public class NullAway extends BugChecker
             tree,
             null,
             state);
-    if (description != Description.NO_MATCH) {
+    if (description != NO_MATCH) {
       return description;
     }
     // if the body has a return statement, that gets checked in matchReturn().  We need this code
@@ -782,7 +787,7 @@ public class NullAway extends BugChecker
       ExpressionTree resExpr = (ExpressionTree) tree.getBody();
       return checkReturnExpression(tree, resExpr, funcInterfaceMethod, state);
     }
-    return Description.NO_MATCH;
+    return NO_MATCH;
   }
 
   /**
@@ -792,7 +797,7 @@ public class NullAway extends BugChecker
   @Override
   public Description matchMemberReference(MemberReferenceTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     Symbol.MethodSymbol referencedMethod = ASTHelpers.getSymbol(tree);
     Symbol.MethodSymbol funcInterfaceSymbol =
@@ -869,7 +874,7 @@ public class NullAway extends BugChecker
   @Override
   public Description matchIdentifier(IdentifierTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     return checkForReadBeforeInit(tree, state);
   }
@@ -887,37 +892,37 @@ public class NullAway extends BugChecker
     }
     if (enclosingBlockPath == null) {
       // is this possible?
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     if (!config.assertsEnabled()
         && enclosingBlockPath.getLeaf().getKind().equals(Tree.Kind.ASSERT)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     if (!relevantInitializerMethodOrBlock(enclosingBlockPath, state)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
 
     // now, make sure we have a field read
     Symbol symbol = ASTHelpers.getSymbol(tree);
     if (symbol == null) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     if (!symbol.getKind().equals(ElementKind.FIELD)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     // for static fields, make sure the enclosing init is a static method or block
     if (symbol.isStatic()) {
       Tree enclosing = enclosingBlockPath.getLeaf();
       if (enclosing instanceof MethodTree
           && !ASTHelpers.getSymbol((MethodTree) enclosing).isStatic()) {
-        return Description.NO_MATCH;
+        return NO_MATCH;
       } else if (enclosing instanceof BlockTree && !((BlockTree) enclosing).isStatic()) {
-        return Description.NO_MATCH;
+        return NO_MATCH;
       }
     }
     if (okToReadBeforeInitialized(path)) {
       // writing the field, not reading it
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
 
     // check that the field might actually be problematic to read
@@ -926,11 +931,11 @@ public class NullAway extends BugChecker
     if (!(entities.nonnullInstanceFields().contains(symbol)
         || entities.nonnullStaticFields().contains(symbol))) {
       // field is either nullable or initialized at declaration
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     if (errorBuilder.symbolHasSuppressWarningsAnnotation(symbol, INITIALIZATION_CHECK_NAME)) {
       // also suppress checking read before init, as we may not find explicit initialization
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     return checkPossibleUninitFieldRead(tree, state, symbol, path, enclosingBlockPath);
   }
@@ -989,7 +994,7 @@ public class NullAway extends BugChecker
               "read of @NonNull field " + symbol + " before initialization");
       return errorBuilder.createErrorDescription(errorMessage, buildDescription(tree), state, null);
     } else {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
   }
 
@@ -1209,14 +1214,14 @@ public class NullAway extends BugChecker
   @Override
   public Description matchVariable(VariableTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     VarSymbol symbol = ASTHelpers.getSymbol(tree);
     if (symbol.type.isPrimitive() && tree.getInitializer() != null) {
       return doUnboxingCheck(state, tree.getInitializer());
     }
     if (!symbol.getKind().equals(ElementKind.FIELD)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     ExpressionTree initializer = tree.getInitializer();
     if (initializer != null) {
@@ -1231,7 +1236,7 @@ public class NullAway extends BugChecker
         }
       }
     }
-    return Description.NO_MATCH;
+    return NO_MATCH;
   }
 
   @Override
@@ -1282,6 +1287,20 @@ public class NullAway extends BugChecker
               classSymbol, NullabilityUtil.NULLMARKED_SIMPLE_NAME)) {
         nullMarkingForTopLevelClass = NullMarking.PARTIALLY_MARKED;
       }
+      // handle the case where the top-class in annotated but there is a @NullUnmarked annotation on
+      // a nested class
+      if (nullMarkingForTopLevelClass == NullMarking.FULLY_MARKED
+          && ASTHelpers.hasDirectAnnotationWithSimpleName(
+              classSymbol, NullabilityUtil.NULLUNMARKED_SIMPLE_NAME)) {
+        // code for handling the @NullUnMarked cases
+        nullMarkingForTopLevelClass = NullMarking.PARTIALLY_MARKED;
+      }
+      /*
+      if (nullMarkingForTopLevelClass == NullMarking.FULLY_UNMARKED && ASTHelpers.hasDirectAnnotationWithSimpleName(
+              classSymbol, NullabilityUtil.NULLUNMARKED_SIMPLE_NAME)) {
+        nullMarkingForTopLevelClass = NullMarking.FULLY_UNMARKED;
+      }*/
+
     }
     if (withinAnnotatedCode(state)) {
       // we need to update the environment before checking field initialization, as the latter
@@ -1291,7 +1310,7 @@ public class NullAway extends BugChecker
       }
       checkFieldInitialization(tree, state);
     }
-    return Description.NO_MATCH;
+    return NO_MATCH;
   }
 
   // UNBOXING CHECKS
@@ -1299,7 +1318,7 @@ public class NullAway extends BugChecker
   @Override
   public Description matchBinary(BinaryTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     ExpressionTree leftOperand = tree.getLeftOperand();
     ExpressionTree rightOperand = tree.getRightOperand();
@@ -1314,13 +1333,13 @@ public class NullAway extends BugChecker
     if (rightType.isPrimitive() && !leftType.isPrimitive()) {
       return doUnboxingCheck(state, leftOperand);
     }
-    return Description.NO_MATCH;
+    return NO_MATCH;
   }
 
   @Override
   public Description matchUnary(UnaryTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     return doUnboxingCheck(state, tree.getExpression());
   }
@@ -1329,7 +1348,7 @@ public class NullAway extends BugChecker
   public Description matchConditionalExpression(
       ConditionalExpressionTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     return doUnboxingCheck(state, tree.getCondition());
   }
@@ -1337,7 +1356,7 @@ public class NullAway extends BugChecker
   @Override
   public Description matchIf(IfTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     return doUnboxingCheck(state, tree.getCondition());
   }
@@ -1345,7 +1364,7 @@ public class NullAway extends BugChecker
   @Override
   public Description matchWhileLoop(WhileLoopTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     return doUnboxingCheck(state, tree.getCondition());
   }
@@ -1353,18 +1372,18 @@ public class NullAway extends BugChecker
   @Override
   public Description matchForLoop(ForLoopTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     if (tree.getCondition() != null) {
       return doUnboxingCheck(state, tree.getCondition());
     }
-    return Description.NO_MATCH;
+    return NO_MATCH;
   }
 
   @Override
   public Description matchEnhancedForLoop(EnhancedForLoopTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
     ExpressionTree expr = tree.getExpression();
     final ErrorMessage errorMessage =
@@ -1374,7 +1393,7 @@ public class NullAway extends BugChecker
     if (mayBeNullExpr(state, expr)) {
       return errorBuilder.createErrorDescription(errorMessage, buildDescription(expr), state, null);
     }
-    return Description.NO_MATCH;
+    return NO_MATCH;
   }
 
   /**
@@ -1399,7 +1418,7 @@ public class NullAway extends BugChecker
         }
       }
     }
-    return Description.NO_MATCH;
+    return NO_MATCH;
   }
 
   /**
@@ -1432,7 +1451,7 @@ public class NullAway extends BugChecker
       // In special cases like one in issue #366
       // formal params and actual params do not match while using JDK11+
       // we bail out in this particular case
-      return Description.NO_MATCH;
+      return NO_MATCH;
     }
 
     if (nonNullPositions == null) {
@@ -1442,7 +1461,7 @@ public class NullAway extends BugChecker
         VarSymbol param = formalParams.get(i);
         if (param.type.isPrimitive()) {
           Description unboxingCheck = doUnboxingCheck(state, actualParams.get(i));
-          if (unboxingCheck != Description.NO_MATCH) {
+          if (unboxingCheck != NO_MATCH) {
             return unboxingCheck;
           } else {
             continue;
@@ -1540,7 +1559,7 @@ public class NullAway extends BugChecker
             null);
       }
     }
-    return Description.NO_MATCH;
+    return NO_MATCH;
   }
 
   /**
@@ -2154,7 +2173,7 @@ public class NullAway extends BugChecker
           || baseExpressionSymbol.getKind() == ElementKind.PACKAGE
           || ElementUtils.isTypeElement(baseExpressionSymbol)) {
         // we know we don't have a null dereference here
-        return Description.NO_MATCH;
+        return NO_MATCH;
       }
     }
     if (mayBeNullExpr(state, baseExpression)) {
@@ -2177,7 +2196,7 @@ public class NullAway extends BugChecker
           null);
     }
 
-    return Description.NO_MATCH;
+    return NO_MATCH;
   }
 
   @SuppressWarnings("unused")

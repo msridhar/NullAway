@@ -287,4 +287,62 @@ public class NullAwayJSpecifyTests extends NullAwayTestsBase {
             "}")
         .doTest();
   }
+
+  // nullUnmarked package level - no class, method, parameters are under the scope of nullmarked
+  @Test
+  public void nullUnMarkedMethodInNullMarkedClass() {
+    defaultCompilationHelper
+        .addSourceLines(
+            "Foo.java",
+            "package com.example.thirdparty;",
+            "import com.uber.nullaway.NullUnmarked;",
+            "@NullUnmarked", // can have null values
+            "public class Foo {",
+            "  public static String foo(String s) {",
+            "    return s;",
+            "  }",
+            "}")
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import com.example.thirdparty.Foo;",
+            "public class Test {",
+            "  public static void test(Object o) {",
+            "    //works fine no bug",
+            "String x = null;",
+            "Foo.foo(x);",
+            "  }",
+            "}")
+        .doTest();
+  }
+
+  /*@Test
+  public void nullUnMarkedClassDisablesChecking() {
+    defaultCompilationHelper
+            .addSourceLines(
+                    "Bar.java",
+                    "package com.example.thirdparty;",
+                    "import org.jspecify.nullness.Nullable;",
+                    "import com.uber.nullaway.NullUnmarked;",
+                    "public class Bar {",
+                    "  @NullUnMarked",
+                    "  public static class Foo {",
+                    "    public static String foo(String s) {",
+                    "      return s;",
+                    "    }",
+                    "    // @NullMarked should also control checking of source",
+                    "    public static void test(Object o) {",
+                    "      // Should work fine",
+                    "      foo(null);",
+                    "    }",
+                    "  }",
+                    "  public static void unchecked() {",
+                    "    Object x = null;",
+                    "    // fine since this code is still unchecked",
+                    "    x.toString();",
+                    "  }",
+                    "}")
+            .doTest();
+  }*/
+
 }

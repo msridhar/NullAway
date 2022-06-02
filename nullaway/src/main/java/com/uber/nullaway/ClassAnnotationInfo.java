@@ -154,7 +154,9 @@ public final class ClassAnnotationInfo {
                 (recordForEnclosing.isNullnessAnnotated
                         || ASTHelpers.hasDirectAnnotationWithSimpleName(
                             classSymbol, NullabilityUtil.NULLMARKED_SIMPLE_NAME))
-                    && !shouldTreatAsUnannotated(classSymbol, config));
+                    && !shouldTreatAsUnannotated(classSymbol, config)
+                    && !ASTHelpers.hasDirectAnnotationWithSimpleName(
+                        classSymbol, NullabilityUtil.NULLUNMARKED_SIMPLE_NAME));
       }
     }
     if (record == null) {
@@ -167,6 +169,7 @@ public final class ClassAnnotationInfo {
 
   private boolean shouldTreatAsUnannotated(Symbol.ClassSymbol classSymbol, Config config) {
     if (config.isUnannotatedClass(classSymbol)) {
+      // NullUnMarked scope
       return true;
     } else if (config.shouldTreatGeneratedAsUnannotated()
         && ASTHelpers.hasDirectAnnotationWithSimpleName(classSymbol, "Generated")) {
