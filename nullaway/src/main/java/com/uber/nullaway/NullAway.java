@@ -302,7 +302,6 @@ public class NullAway extends BugChecker
       case FULLY_MARKED:
         return true;
       case FULLY_UNMARKED:
-        // nullUnmarked scope
         return false;
       case PARTIALLY_MARKED:
         return checkMarkingForPath(state);
@@ -398,7 +397,6 @@ public class NullAway extends BugChecker
   @Override
   public Description matchNewClass(NewClassTree tree, VisitorState state) {
     if (!withinAnnotatedCode(state)) {
-      // NullUnmarked
       return NO_MATCH;
     }
     Symbol.MethodSymbol methodSymbol = ASTHelpers.getSymbol(tree);
