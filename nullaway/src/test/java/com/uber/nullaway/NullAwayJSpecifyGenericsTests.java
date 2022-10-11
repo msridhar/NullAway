@@ -118,11 +118,13 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             "class Test {",
             "    static class NullableTypeParam<E extends @Nullable Object> {}",
             "    static void invalidAssignment() {",
-            "          NullableTypeParam<String> t1 = new   NullableTypeParam<String>();",
+            "          NullableTypeParam<@Nullable String> t1 = new NullableTypeParam<@Nullable String>();",
             "         // BUG: Diagnostic contains: Generic type parameter",
             "          NullableTypeParam<@Nullable String> t2 = new NullableTypeParam<String>();",
             "         // BUG: Diagnostic contains: Generic type parameter",
-            "          NullableTypeParam<String> t = new NullableTypeParam<@Nullable String>();",
+            "          NullableTypeParam<String> t3 = new NullableTypeParam<@Nullable String>();",
+            "         // BUG: Diagnostic contains: Generic type parameter",
+            "          NullableTypeParam<String> t4 = t1;",
             "       }",
             "}")
         .doTest();
@@ -132,6 +134,5 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
     return makeTestHelperWithArgs(
         Arrays.asList(
             "-XepOpt:NullAway:AnnotatedPackages=com.uber", "-XepOpt:NullAway:JSpecifyMode=true"));
-    }
-
+  }
 }
