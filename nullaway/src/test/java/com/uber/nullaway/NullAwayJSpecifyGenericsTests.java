@@ -187,6 +187,7 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             "import org.jspecify.nullness.Nullable;",
             "class Test {",
             " static class NullableTypeParam<E extends @Nullable Object> {}",
+            " static class NullableTypeParamMultipleArguments<E1 extends @Nullable Object, E2> {}",
             " static void testOKOtherAnnotation(NullableTypeParam<String> t) {",
             "       NullableTypeParam<String> t3;",
             "       // BUG: Diagnostic contains: Generic type parameter",
@@ -194,6 +195,10 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             "        NullableTypeParam<@Nullable String> t4;",
             "       // BUG: Diagnostic contains: Generic type parameter",
             "        t4 = t;",
+            "       NullableTypeParamMultipleArguments<String, String> t5 = new NullableTypeParamMultipleArguments<String, String>();",
+            "       NullableTypeParamMultipleArguments<@Nullable String, String> t6 = new NullableTypeParamMultipleArguments<@Nullable String, String>();",
+            "       // BUG: Diagnostic contains: Generic type parameter",
+            "       t5 = t6;",
             "    }",
             "}")
         .doTest();
