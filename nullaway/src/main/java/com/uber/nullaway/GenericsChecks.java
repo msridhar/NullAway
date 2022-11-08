@@ -220,6 +220,7 @@ public class GenericsChecks {
     return nullableAnnotatedArguments;
   }
 
+  // Nested generics are not handled yet
   public static void checkAssignments(
       AssignmentTree tree, VisitorState state, NullAway analysis, Config config) {
     JCTree lhsTree = ((JCTree.JCAssign) tree).lhs;
