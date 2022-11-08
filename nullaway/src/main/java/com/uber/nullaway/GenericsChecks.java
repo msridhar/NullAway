@@ -2,6 +2,7 @@ package com.uber.nullaway;
 
 import com.google.errorprone.VisitorState;
 import com.google.errorprone.util.ASTHelpers;
+import com.sun.source.tree.AssignmentTree;
 import com.sun.source.tree.ParameterizedTypeTree;
 import com.sun.source.tree.Tree;
 import com.sun.tools.javac.code.Attribute;
@@ -165,5 +166,79 @@ public class GenericsChecks {
     state.reportMatch(
         errorBuilder.createErrorDescription(
             errorMessage, analysis.buildDescription(tree), state, null));
+  }
+
+  private static HashSet<Integer> getNullableAnnotatedArgumentsListForNewClassTree(
+      ParameterizedTypeTree tree) {
+    HashSet<Integer> nullableAnnotatedArguments = new HashSet<Integer>();
+    List<? extends Tree> typeArguments = tree.getTypeArguments();
+    for (int i = 0; i < typeArguments.size(); i++) {
+      if (typeArguments.get(i).getClass().equals(JCTree.JCAnnotatedType.class)) {
+        JCTree.JCAnnotatedType annotatedType = (JCTree.JCAnnotatedType) typeArguments.get(i);
+        for (JCTree.JCAnnotation annotation : annotatedType.getAnnotations()) {
+          Attribute.Compound attribute = annotation.attribute;
+          if (attribute.toString().equals("@org.jspecify.nullness.Nullable")) {
+            nullableAnnotatedArguments.add(i);
+            break;
+          }
+        }
+      }
+    }
+    return nullableAnnotatedArguments;
+  }
+
+  private static HashSet<Integer> getNullableAnnotatedArgumentsListForNormalTree(
+      Tree tree, Config config) {
+    Type type = ASTHelpers.getType(tree);
+    HashSet<Integer> nullableTypeArguments = new HashSet<Integer>();
+    if (type == null) {
+      return nullableTypeArguments;
+    }
+    com.sun.tools.javac.util.List<Type> typeArguments = type.getTypeArguments();
+    for (int index = 0; index < typeArguments.size(); index++) {
+      com.sun.tools.javac.util.List<Attribute.TypeCompound> annotationMirrors =
+          typeArguments.get(index).getAnnotationMirrors();
+      boolean hasNullableAnnotation =
+          Nullness.hasNullableAnnotation(annotationMirrors.stream(), config);
+      if (hasNullableAnnotation) {
+        nullableTypeArguments.add(index);
+      }
+    }
+    return nullableTypeArguments;
+  }
+
+  private static HashSet<Integer> getNullableAnnotatedArgumentsList(JCTree tree, Config config) {
+    HashSet<Integer> nullableAnnotatedArguments = new HashSet<Integer>();
+    if (tree.getClass().getName().equals("com.sun.tools.javac.tree.JCTree$JCNewClass")) {
+      ParameterizedTypeTree parameterizedTypeTree =
+          (ParameterizedTypeTree) ((JCTree.JCNewClass) tree).getIdentifier();
+      nullableAnnotatedArguments =
+          getNullableAnnotatedArgumentsListForNewClassTree(parameterizedTypeTree);
+    } else {
+      nullableAnnotatedArguments = getNullableAnnotatedArgumentsListForNormalTree(tree, config);
+    }
+    return nullableAnnotatedArguments;
+  }
+
+  public static void checkAssignments(
+      AssignmentTree tree, VisitorState state, NullAway analysis, Config config) {
+    JCTree lhsTree = ((JCTree.JCAssign) tree).lhs;
+    JCTree rhsTree = ((JCTree.JCAssign) tree).rhs;
+
+    HashSet<Integer> lhsNullableAnnotatedArguments =
+        getNullableAnnotatedArgumentsList(lhsTree, config);
+    HashSet<Integer> rhsNullableAnnotatedArguments =
+        getNullableAnnotatedArgumentsList(rhsTree, config);
+
+    if (lhsNullableAnnotatedArguments.size() != rhsNullableAnnotatedArguments.size()) {
+      invalidInstantiationError(tree, state, analysis);
+    } else {
+      for (int index : lhsNullableAnnotatedArguments) {
+        if (!rhsNullableAnnotatedArguments.contains(index)) {
+          invalidInstantiationError(tree, state, analysis);
+          break;
+        }
+      }
+    }
   }
 }
