@@ -168,9 +168,9 @@ public class GenericsChecks {
             errorMessage, analysis.buildDescription(tree), state, null));
   }
 
-  private static HashSet<Integer> getNullableAnnotatedArgumentsListForNewClassTree(
-      ParameterizedTypeTree tree) {
-    HashSet<Integer> nullableAnnotatedArguments = new HashSet<Integer>();
+  private static HashSet<String> getNullableAnnotatedArgumentsListForNewClassTree(
+      ParameterizedTypeTree tree, int nestingLevel, int nestedParamIndex) {
+    HashSet<String> nullableAnnotatedArguments = new HashSet<String>();
     List<? extends Tree> typeArguments = tree.getTypeArguments();
     for (int i = 0; i < typeArguments.size(); i++) {
       if (typeArguments.get(i).getClass().equals(JCTree.JCAnnotatedType.class)) {
@@ -178,19 +178,36 @@ public class GenericsChecks {
         for (JCTree.JCAnnotation annotation : annotatedType.getAnnotations()) {
           Attribute.Compound attribute = annotation.attribute;
           if (attribute.toString().equals("@org.jspecify.nullness.Nullable")) {
-            nullableAnnotatedArguments.add(i);
+            String currentString = nestingLevel + "." + nestedParamIndex + "." + String.valueOf(i);
+            nullableAnnotatedArguments.add(currentString);
             break;
           }
         }
       }
     }
+
+    for (int i = 0; i < typeArguments.size(); i++) {
+      if (typeArguments.get(i).getClass().equals(JCTree.JCTypeApply.class)) {
+        ParameterizedTypeTree parameterizedTypeTreeForTypeArgument =
+            (ParameterizedTypeTree) typeArguments.get(i);
+        Type argumentType = ASTHelpers.getType(parameterizedTypeTreeForTypeArgument);
+        if (argumentType != null
+            && argumentType.getTypeArguments() != null
+            && argumentType.getTypeArguments().length() > 0) { // Nested generics
+          nullableAnnotatedArguments.addAll(
+              getNullableAnnotatedArgumentsListForNewClassTree(
+                  parameterizedTypeTreeForTypeArgument, nestingLevel + 1, i));
+        }
+      }
+    }
+
     return nullableAnnotatedArguments;
   }
 
-  private static HashSet<Integer> getNullableAnnotatedArgumentsListForNormalTree(
-      Tree tree, Config config) {
-    Type type = ASTHelpers.getType(tree);
-    HashSet<Integer> nullableTypeArguments = new HashSet<Integer>();
+  private static HashSet<String> getNullableAnnotatedArgumentsListForNormalTree(
+      Type type, Tree tree, Config config, int nestingLevel, int nestedArgumentIndex) {
+    type = (type == null) ? ASTHelpers.getType(tree) : type;
+    HashSet<String> nullableTypeArguments = new HashSet<String>();
     if (type == null) {
       return nullableTypeArguments;
     }
@@ -201,21 +218,33 @@ public class GenericsChecks {
       boolean hasNullableAnnotation =
           Nullness.hasNullableAnnotation(annotationMirrors.stream(), config);
       if (hasNullableAnnotation) {
-        nullableTypeArguments.add(index);
+        String currentAnnotation =
+            nestingLevel + "." + nestedArgumentIndex + "." + String.valueOf(index);
+        nullableTypeArguments.add(currentAnnotation);
+      }
+    }
+    for (int i = 0; i < typeArguments.size(); i++) {
+      // check for nesting
+      if (typeArguments.get(i).getTypeArguments().length() > 0) {
+        // add values to the result set
+        nullableTypeArguments.addAll(
+            getNullableAnnotatedArgumentsListForNormalTree(
+                typeArguments.get(i), tree, config, nestingLevel + 1, i));
       }
     }
     return nullableTypeArguments;
   }
 
-  private static HashSet<Integer> getNullableAnnotatedArgumentsList(JCTree tree, Config config) {
-    HashSet<Integer> nullableAnnotatedArguments = new HashSet<Integer>();
+  private static HashSet<String> getNullableAnnotatedArgumentsList(JCTree tree, Config config) {
+    HashSet<String> nullableAnnotatedArguments = new HashSet<String>();
     if (tree.getClass().getName().equals("com.sun.tools.javac.tree.JCTree$JCNewClass")) {
       ParameterizedTypeTree parameterizedTypeTree =
           (ParameterizedTypeTree) ((JCTree.JCNewClass) tree).getIdentifier();
       nullableAnnotatedArguments =
-          getNullableAnnotatedArgumentsListForNewClassTree(parameterizedTypeTree);
+          getNullableAnnotatedArgumentsListForNewClassTree(parameterizedTypeTree, 0, 0);
     } else {
-      nullableAnnotatedArguments = getNullableAnnotatedArgumentsListForNormalTree(tree, config);
+      nullableAnnotatedArguments =
+          getNullableAnnotatedArgumentsListForNormalTree(null, tree, config, 0, 0);
     }
     return nullableAnnotatedArguments;
   }
@@ -226,16 +255,16 @@ public class GenericsChecks {
     JCTree lhsTree = ((JCTree.JCAssign) tree).lhs;
     JCTree rhsTree = ((JCTree.JCAssign) tree).rhs;
 
-    HashSet<Integer> lhsNullableAnnotatedArguments =
+    HashSet<String> lhsNullableAnnotatedArguments =
         getNullableAnnotatedArgumentsList(lhsTree, config);
-    HashSet<Integer> rhsNullableAnnotatedArguments =
+    HashSet<String> rhsNullableAnnotatedArguments =
         getNullableAnnotatedArgumentsList(rhsTree, config);
 
     if (lhsNullableAnnotatedArguments.size() != rhsNullableAnnotatedArguments.size()) {
       invalidInstantiationError(tree, state, analysis);
     } else {
-      for (int index : lhsNullableAnnotatedArguments) {
-        if (!rhsNullableAnnotatedArguments.contains(index)) {
+      for (String annotatedParam : lhsNullableAnnotatedArguments) {
+        if (!rhsNullableAnnotatedArguments.contains(annotatedParam)) {
           invalidInstantiationError(tree, state, analysis);
           break;
         }
