@@ -205,8 +205,7 @@ public class GenericsChecks {
   }
 
   private static HashSet<String> getNullableAnnotatedArgumentsListForNormalTree(
-      Type type, Tree tree, Config config, int nestingLevel, int nestedArgumentIndex) {
-    type = (type == null) ? ASTHelpers.getType(tree) : type;
+      Type type, Config config, int nestingLevel, int nestedArgumentIndex) {
     HashSet<String> nullableTypeArguments = new HashSet<String>();
     if (type == null) {
       return nullableTypeArguments;
@@ -229,7 +228,7 @@ public class GenericsChecks {
         // add values to the result set
         nullableTypeArguments.addAll(
             getNullableAnnotatedArgumentsListForNormalTree(
-                typeArguments.get(i), tree, config, nestingLevel + 1, i));
+                typeArguments.get(i), config, nestingLevel + 1, i));
       }
     }
     return nullableTypeArguments;
@@ -243,8 +242,14 @@ public class GenericsChecks {
       nullableAnnotatedArguments =
           getNullableAnnotatedArgumentsListForNewClassTree(parameterizedTypeTree, 0, 0);
     } else {
-      nullableAnnotatedArguments =
-          getNullableAnnotatedArgumentsListForNormalTree(null, tree, config, 0, 0);
+
+      if (tree != null) {
+        Type type = ASTHelpers.getType(tree);
+        if (type != null) {
+          nullableAnnotatedArguments =
+              getNullableAnnotatedArgumentsListForNormalTree(type, config, 0, 0);
+        }
+      }
     }
     return nullableAnnotatedArguments;
   }
