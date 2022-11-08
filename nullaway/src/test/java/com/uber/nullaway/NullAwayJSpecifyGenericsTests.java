@@ -199,6 +199,10 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             "       NullableTypeParamMultipleArguments<@Nullable String, String> t6 = new NullableTypeParamMultipleArguments<@Nullable String, String>();",
             "       // BUG: Diagnostic contains: Generic type parameter",
             "       t5 = t6;",
+            "       NullableTypeParam<NullableTypeParam<NullableTypeParam<@Nullable String>>> t7 = new NullableTypeParam<NullableTypeParam<NullableTypeParam<@Nullable String>>>();",
+            "       NullableTypeParam<NullableTypeParam<NullableTypeParam<String>>> t8 = new NullableTypeParam<NullableTypeParam<NullableTypeParam<String>>>();",
+            "       // BUG: Diagnostic contains: Generic type parameter",
+            "       t7 = t8;",
             "    }",
             "}")
         .doTest();
