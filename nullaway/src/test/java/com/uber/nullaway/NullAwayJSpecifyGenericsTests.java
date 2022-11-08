@@ -188,6 +188,7 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             "class Test {",
             " static class NullableTypeParam<E extends @Nullable Object> {}",
             " static class NullableTypeParamMultipleArguments<E1 extends @Nullable Object, E2> {}",
+            " static class NullableTypeParamMultipleArgumentsNested<E1 extends @Nullable Object, E2, E3 extends @Nullable Object> {}",
             " static void testOKOtherAnnotation(NullableTypeParam<String> t) {",
             "       NullableTypeParam<String> t3;",
             "       // BUG: Diagnostic contains: Generic type parameter",
@@ -206,6 +207,14 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             "       NullableTypeParam<NullableTypeParam<NullableTypeParam<@Nullable String>>> t9 = new  NullableTypeParam<NullableTypeParam<NullableTypeParam<@Nullable String>>> ();",
             "       //No error",
             "       t7 = t9;",
+            "       NullableTypeParamMultipleArguments<NullableTypeParam<NullableTypeParam<@Nullable String>>, String> t10 = new  NullableTypeParamMultipleArguments<NullableTypeParam<NullableTypeParam<@Nullable String>>, String> ();",
+            "       NullableTypeParamMultipleArguments<NullableTypeParam<NullableTypeParam<String>>, String> t11 = new  NullableTypeParamMultipleArguments<NullableTypeParam<NullableTypeParam<String>>, String> ();",
+            "       // BUG: Diagnostic contains: Generic type parameter",
+            "       t10 = t11;",
+            "       NullableTypeParamMultipleArgumentsNested<NullableTypeParam<NullableTypeParam<@Nullable String>>, String, @Nullable String> t12 = new  NullableTypeParamMultipleArgumentsNested<NullableTypeParam<NullableTypeParam<@Nullable String>>, String, @Nullable String> ();",
+            "       NullableTypeParamMultipleArgumentsNested<NullableTypeParam<NullableTypeParam<String>>, String, @Nullable String> t13 = new  NullableTypeParamMultipleArgumentsNested<NullableTypeParam<NullableTypeParam<String>>, String, @Nullable String>  ();",
+            "       // BUG: Diagnostic contains: Generic type parameter",
+            "       t12 = t13;",
             "    }",
             "}")
         .doTest();
