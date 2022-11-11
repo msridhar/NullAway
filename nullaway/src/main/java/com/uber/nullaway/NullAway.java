@@ -69,7 +69,6 @@ import com.sun.source.tree.MemberSelectTree;
 import com.sun.source.tree.MethodInvocationTree;
 import com.sun.source.tree.MethodTree;
 import com.sun.source.tree.NewClassTree;
-import com.sun.source.tree.ParameterizedTypeTree;
 import com.sun.source.tree.ParenthesizedTree;
 import com.sun.source.tree.ReturnTree;
 import com.sun.source.tree.StatementTree;
@@ -413,13 +412,7 @@ public class NullAway extends BugChecker
       // see https://github.com/uber/NullAway/issues/102
       methodSymbol = getSymbolOfSuperConstructor(methodSymbol, state);
     }
-    // check if the class is generic
-    Type classType = ASTHelpers.getType(tree);
-    if (classType != null && classType.getTypeArguments().length() > 0) {
-      ParameterizedTypeTree parameterizedTypeTree = (ParameterizedTypeTree) tree.getIdentifier();
-      GenericsChecks.checkInstantiationForParameterizedTypedTree(
-          parameterizedTypeTree, state, this, config);
-    }
+
     return handleInvocation(tree, state, methodSymbol, actualParams);
   }
 
@@ -624,24 +617,6 @@ public class NullAway extends BugChecker
     // package)
     Symbol.MethodSymbol methodSymbol = ASTHelpers.getSymbol(tree);
     handler.onMatchMethod(this, tree, state, methodSymbol);
-    // check parameter types
-    for (VariableTree varTree : tree.getParameters()) {
-      Type paramType = ASTHelpers.getType(varTree);
-      if (paramType != null && paramType.getTypeArguments().length() > 0) {
-        GenericsChecks.checkInstantiatedType(paramType, state, varTree, this, config);
-      }
-    }
-
-    // generics check for function return type
-    Tree returnTypeTree = tree.getReturnType();
-    if (tree.getReturnType() != null) {
-      Type returnType = ASTHelpers.getType(returnTypeTree);
-      if (returnType != null
-          && returnType.getTypeArguments() != null
-          && returnType.getTypeArguments().length() > 0) { // generics check
-        GenericsChecks.checkInstantiatedType(returnType, state, returnTypeTree, this, config);
-      }
-    }
 
     boolean isOverriding = ASTHelpers.hasAnnotation(methodSymbol, Override.class, state);
     boolean exhaustiveOverride = config.exhaustiveOverride();
@@ -1350,11 +1325,6 @@ public class NullAway extends BugChecker
     if (!withinAnnotatedCode(state)) {
       return Description.NO_MATCH;
     }
-    // Check if the variable is generi
-    Type variableType = ASTHelpers.getType(tree);
-    if (variableType != null && variableType.getTypeArguments().length() > 0) {
-      GenericsChecks.checkInstantiatedType(variableType, state, tree, this, config);
-    }
 
     // is nested variable
     VarSymbol symbol = ASTHelpers.getSymbol(tree);
@@ -1454,28 +1424,6 @@ public class NullAway extends BugChecker
         updateEnvironmentMapping(state.getPath(), state);
       }
       checkFieldInitialization(tree, state);
-    }
-    JCTree.JCClassDecl classTree = (JCTree.JCClassDecl) tree;
-    // check if the class extends any class
-    if (classTree.extending != null) {
-      Type extendedClassType = classTree.extending.type;
-      // check if the extended class is generic
-      if (extendedClassType.getTypeArguments().length() > 0) {
-
-        GenericsChecks.checkInstantiatedType(extendedClassType, state, tree, this, config);
-      }
-    }
-    // check if the class implements any interface
-    List<JCTree.JCExpression> interfaces = classTree.implementing;
-    if (interfaces.size() > 0) {
-      for (int i = 0; i < interfaces.size(); i++) {
-        Type implementedInterfaceType = interfaces.get(i).type;
-        // check if the interface is generic
-        if (implementedInterfaceType.getTypeArguments().size() > 0) {
-          GenericsChecks.checkInstantiatedType(
-              implementedInterfaceType, state, classTree, this, config);
-        }
-      }
     }
     return Description.NO_MATCH;
   }
