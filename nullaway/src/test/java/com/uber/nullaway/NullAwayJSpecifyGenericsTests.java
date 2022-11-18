@@ -17,7 +17,7 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             " static class NullableTypeParam<E extends @Nullable Object> {}",
             " static class NullableTypeParamMultipleArguments<E1 extends @Nullable Object, E2> {}",
             " static class NullableTypeParamMultipleArgumentsNested<E1 extends @Nullable Object, E2, E3 extends @Nullable Object> {}",
-            " static  NullableTypeParam<@Nullable String> testOKOtherAnnotation(NullableTypeParam<String> t) {",
+            " static NullableTypeParam<@Nullable String> testOKOtherAnnotation(NullableTypeParam<String> t) {",
             "       NullableTypeParam<String> t3;",
             "       // BUG: Diagnostic contains: Generic type parameter",
             "        t3 = new NullableTypeParam<@Nullable String>();",
@@ -51,6 +51,31 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             "       // BUG: Diagnostic contains: Generic type parameter",
             "      t2 = testOKOtherAnnotation(t1);",
             "}",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void testObjectAssignments() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import org.jspecify.nullness.Nullable;",
+            "class NullableTypeParam<E extends @Nullable Object> {}",
+            "class TestClass1 { ",
+            "public NullableTypeParam<String> t1;",
+            "TestClass1() {",
+            " // BUG: Diagnostic contains: Generic type parameter",
+            " this.t1 = new NullableTypeParam<@Nullable String>();",
+            "}",
+            "}",
+            "class TestClass2 {",
+            "  TestClass2() {",
+            "    TestClass1 object = new TestClass1();",
+            "    // BUG: Diagnostic contains: Generic type parameter",
+            "    object.t1 = new NullableTypeParam<@Nullable String>();",
+            "  }",
             "}")
         .doTest();
   }
