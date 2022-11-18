@@ -17,7 +17,7 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             " static class NullableTypeParam<E extends @Nullable Object> {}",
             " static class NullableTypeParamMultipleArguments<E1 extends @Nullable Object, E2> {}",
             " static class NullableTypeParamMultipleArgumentsNested<E1 extends @Nullable Object, E2, E3 extends @Nullable Object> {}",
-            " static void testOKOtherAnnotation(NullableTypeParam<String> t) {",
+            " static  NullableTypeParam<@Nullable String> testOKOtherAnnotation(NullableTypeParam<String> t) {",
             "       NullableTypeParam<String> t3;",
             "       // BUG: Diagnostic contains: Generic type parameter",
             "        t3 = new NullableTypeParam<@Nullable String>();",
@@ -43,7 +43,14 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             "       NullableTypeParamMultipleArgumentsNested<NullableTypeParam<NullableTypeParam<String>>, String, @Nullable String> t13 = new  NullableTypeParamMultipleArgumentsNested<NullableTypeParam<NullableTypeParam<String>>, String, @Nullable String>  ();",
             "       // BUG: Diagnostic contains: Generic type parameter",
             "       t12 = t13;",
+            "       return t;",
             "    }",
+            " static void callOtherMethod() {",
+            "      NullableTypeParam<String> t1 = new NullableTypeParam<String>();",
+            "      NullableTypeParam<String> t2 = null; ",
+            "       // BUG: Diagnostic contains: Generic type parameter",
+            "      t2 = testOKOtherAnnotation(t1);",
+            "}",
             "}")
         .doTest();
   }
