@@ -62,6 +62,7 @@ def apt = [
     autoServiceAnnot : "com.google.auto.service:auto-service-annotations:${versions.autoService}",
     jakartaInject    : "jakarta.inject:jakarta.inject-api:2.0.0",
     javaxInject      : "javax.inject:javax.inject:1",
+    errorProneSupport: "tech.picnic.error-prone-support:error-prone-contrib:0.7.0"
 ]
 
 def build = [

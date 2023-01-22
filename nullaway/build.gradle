@@ -30,6 +30,7 @@ dependencies {
     annotationProcessor deps.apt.autoValue
     compileOnly deps.apt.autoServiceAnnot
     annotationProcessor deps.apt.autoService
+    errorprone deps.apt.errorProneSupport
     compileOnly deps.build.jsr305Annotations
     compileOnly deps.test.jetbrainsAnnotations
 
@@ -37,6 +38,8 @@ dependencies {
     compileOnly deps.build.errorProneCheckApi
     implementation deps.build.checkerDataflow
     implementation deps.build.guava
+
+    //testAnnotationProcessor deps.apt.errorProneSupport
 
     testImplementation project(":annotations")
     testImplementation deps.test.junit4
@@ -69,6 +72,16 @@ dependencies {
     nullawayJar "com.uber.nullaway:nullaway:$VERSION_NAME"
 }
 
+tasks.withType(JavaCompile) {
+    options.errorprone {
+        check("StaticImport", CheckSeverity.OFF)
+        check("CanonicalAnnotationSyntax", CheckSeverity.OFF)
+        check("FormatStringConcatenation", CheckSeverity.OFF)
+        check("CollectorMutability", CheckSeverity.OFF)
+        check("IdentityConversion", CheckSeverity.OFF)
+        errorproneArgs.addAll("-XepPatchChecks:ErrorProneTestHelperSourceFormat", "-XepPatchLocation:IN_PLACE")
+    }
+}
 javadoc {
     failOnError = false
 }

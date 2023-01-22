@@ -26,7 +26,9 @@ public class NullAwayUnsoundnessTests extends NullAwayTestsBase {
         .addSourceLines(
             "Test.java",
             "package com.uber;",
+            "",
             "import java.util.*;",
+            "",
             "public class Test {",
             "  public void mapReassignUnsound(Map m, Object o) {",
             "    if (m.containsKey(o)) {",

@@ -35,15 +35,17 @@ public class NullAwayInitializationTests extends NullAwayTestsBase {
         .addSourceLines(
             "ExternalInit.java",
             "package com.uber;",
+            "",
             "@java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.CLASS)",
             "public @interface ExternalInit {}")
         .addSourceLines(
             "Test.java",
             "package com.uber;",
+            "",
             "@ExternalInit",
             "class Test {",
             "  Object f;",
-            // no error here due to external init
+            "",
             "  public Test() {}",
             "  // BUG: Diagnostic contains: initializer method does not guarantee @NonNull field",
             "  public Test(int x) {}",
@@ -51,14 +53,15 @@ public class NullAwayInitializationTests extends NullAwayTestsBase {
         .addSourceLines(
             "Test2.java",
             "package com.uber;",
+            "",
             "@ExternalInit",
             "class Test2 {",
-            // no error here due to external init
             "  Object f;",
             "}")
         .addSourceLines(
             "Test3.java",
             "package com.uber;",
+            "",
             "@ExternalInit",
             "class Test3 {",
             "  Object f;",
@@ -74,35 +77,38 @@ public class NullAwayInitializationTests extends NullAwayTestsBase {
         .addSourceLines(
             "ExternalFieldInit.java",
             "package com.uber;",
+            "",
             "@java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.CLASS)",
             "public @interface ExternalFieldInit {}")
         .addSourceLines(
             "Test.java",
             "package com.uber;",
+            "",
             "class Test {",
             "  @ExternalFieldInit Object f;",
-            // no error here due to external init
+            "",
             "  public Test() {}",
-            // no error here due to external init
+            "",
             "  public Test(int x) {}",
             "}")
         .addSourceLines(
             "Test2.java",
             "package com.uber;",
+            "",
             "class Test2 {",
-            // no error here due to external init
             "  @ExternalFieldInit Object f;",
             "}")
         .addSourceLines(
             "Test3.java",
             "package com.uber;",
+            "",
             "class Test3 {",
             "  @ExternalFieldInit Object f;",
-            // no error here due to external init
-            "  @ExternalFieldInit", // See GitHub#184
+            "",
+            "  @ExternalFieldInit",
             "  public Test3() {}",
-            // no error here due to external init
-            "  @ExternalFieldInit", // See GitHub#184
+            "",
+            "  @ExternalFieldInit",
             "  public Test3(int x) {}",
             "}")
         .doTest();
@@ -114,11 +120,13 @@ public class NullAwayInitializationTests extends NullAwayTestsBase {
         .addSourceLines(
             "SomeEnum.java",
             "package com.uber;",
-            "import java.util.Random;",
+            "",
             "enum SomeEnum {",
-            "  FOO, BAR;",
+            "  FOO,",
+            "  BAR;",
             "  final Object o;",
             "  final Object p;",
+            "",
             "  private SomeEnum() {",
             "    this.o = new Object();",
             "    this.p = new Object();",
