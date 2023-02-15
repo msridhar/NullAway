@@ -557,6 +557,31 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
         .doTest();
   }
 
+  @Test
+  public void methodMatch() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "class Test {",
+            "  interface Fn<P extends @Nullable Object, R extends @Nullable Object> {",
+            "   R apply(P p);",
+            "  }",
+            " static class TestFunc implements Fn<String,@Nullable String> {",
+            "  @Override",
+            "  public @Nullable String apply(String s) {",
+            "   return null;",
+            "  }",
+            " }",
+            " static void useTestFunc(String s) {",
+            "    Fn<String,String> f = new TestFunc();",
+            "     String t = f.apply(s);",
+            " }",
+            "}")
+        .doTest();
+  }
+
   private CompilationTestHelper makeHelper() {
     return makeTestHelperWithArgs(
         Arrays.asList(
