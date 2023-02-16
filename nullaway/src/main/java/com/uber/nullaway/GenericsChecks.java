@@ -158,7 +158,7 @@ public final class GenericsChecks {
    * @return Type of the tree with preserved annotations.
    */
   @Nullable
-  private Type getTreeType(Tree tree) {
+  public Type getTreeType(Tree tree) {
     if (tree instanceof NewClassTree
         && ((NewClassTree) tree).getIdentifier() instanceof ParameterizedTypeTree) {
       ParameterizedTypeTree paramTypedTree =
