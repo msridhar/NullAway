@@ -82,10 +82,12 @@ import com.sun.source.tree.VariableTree;
 import com.sun.source.tree.WhileLoopTree;
 import com.sun.source.util.TreePath;
 import com.sun.source.util.Trees;
+import com.sun.tools.javac.code.Attribute;
 import com.sun.tools.javac.code.Symbol;
 import com.sun.tools.javac.code.Symbol.ClassSymbol;
 import com.sun.tools.javac.code.Symbol.VarSymbol;
 import com.sun.tools.javac.code.Type;
+import com.sun.tools.javac.code.Types;
 import com.sun.tools.javac.processing.JavacProcessingEnvironment;
 import com.sun.tools.javac.tree.JCTree;
 import com.uber.nullaway.ErrorMessage.MessageTypes;
@@ -607,6 +609,7 @@ public class NullAway extends BugChecker
     }
   }
 
+  @SuppressWarnings({"UnusedVariable"})
   @Override
   public Description matchMethod(MethodTree tree, VisitorState state) {
     checkForMethodNullMarkedness(tree, state);
@@ -901,6 +904,7 @@ public class NullAway extends BugChecker
    * @param state visitor state.
    * @return discovered error, or {@link Description#NO_MATCH} if no error
    */
+  @SuppressWarnings({"UnusedVariable"})
   private Description checkOverriding(
       Symbol.MethodSymbol overriddenMethod,
       Symbol.MethodSymbol overridingMethod,
@@ -926,6 +930,8 @@ public class NullAway extends BugChecker
       if (isOverridingMethodAnnotated && Nullness.hasNullableAnnotation(overridingMethod, config)) {
         overridingMethodReturnNullness = Nullness.NULLABLE;
       }
+      boolean shouldReportError = nullnessMatching(overriddenMethod, overridingMethod, state);
+
       // We must once again check the handler chain, to allow it to update nullability of the
       // overriding method
       // (e.g. through AcknowledgeRestrictiveAnnotations=true)
@@ -934,7 +940,8 @@ public class NullAway extends BugChecker
               overridingMethod, state, isOverridingMethodAnnotated, overridingMethodReturnNullness);
       if (overridingMethodReturnNullness.equals(Nullness.NULLABLE)
           && (memberReferenceTree == null
-              || getComputedNullness(memberReferenceTree).equals(Nullness.NULLABLE))) {
+              || getComputedNullness(memberReferenceTree).equals(Nullness.NULLABLE))
+          && shouldReportError) {
         String message;
         if (memberReferenceTree != null) {
           message =
@@ -968,6 +975,105 @@ public class NullAway extends BugChecker
     // overriding method cannot assume @Nonnull
     return checkParamOverriding(
         overridingMethod.getParameters(), overriddenMethod, null, memberReferenceTree, state);
+  }
+
+  public boolean nullnessMatching(
+      Symbol.MethodSymbol overriddenMethod,
+      Symbol.MethodSymbol overridingMethod,
+      VisitorState state) {
+
+    Type overridenMethodReturnType = ((Type.MethodType) overriddenMethod.type).restype;
+    List<Symbol.TypeVariableSymbol> ownerTypeParams = overriddenMethod.owner.getTypeParameters();
+    // generics
+    Type type = overridenMethodReturnType;
+    Type type2 = null;
+    Types types = state.getTypes();
+    boolean matchNullness = false;
+    if (!ownerTypeParams.isEmpty()) {
+      for (int i = 0; i < ownerTypeParams.size(); i++) {
+        if (types.asSuper(type, ownerTypeParams.get(i)) != null) {
+          type2 = ownerTypeParams.get(i).type;
+          break;
+        }
+      }
+    }
+    // situation where we have the return type in the owner's type arguments
+    // check for nullability annotations
+    if (type2 != null) {
+      List<Attribute.TypeCompound> annotationsType1 = type.getUpperBound().getAnnotationMirrors();
+      List<Attribute.TypeCompound> annotationsType2 = type2.getUpperBound().getAnnotationMirrors();
+      boolean hasNullableAnnotation = false;
+      for (Attribute.TypeCompound annotation : annotationsType1) {
+        if (annotation.getAnnotationType().toString().equals("org.jspecify.annotations.Nullable")) {
+          hasNullableAnnotation = true;
+          break;
+        }
+      }
+      for (Attribute.TypeCompound annotation : annotationsType2) {
+        if (annotation.getAnnotationType().toString().equals("org.jspecify.annotations.Nullable")) {
+          if (hasNullableAnnotation) {
+            matchNullness = true;
+          } else {
+            matchNullness = false;
+          }
+          break;
+        }
+      }
+    }
+    // check if the annotations of the overriding method match with the owner
+    // find matching interface
+    List<Type> interfaces = ((ClassSymbol) overridingMethod.owner).getInterfaces();
+    Symbol matchingInterface = null;
+    for (Type t : interfaces) {
+      if (t.tsym.equals(overriddenMethod.owner)) {
+        matchingInterface = t.tsym;
+      }
+    }
+    // technically impossible but just to be safe
+    boolean matchNullness2 = false;
+    if (matchingInterface != null) {
+      List<Symbol.TypeVariableSymbol> interfaceTypeParameters =
+          matchingInterface.getTypeParameters();
+
+      Type returnType1 = overridingMethod.getReturnType();
+      Type typeOfParamMatchingMethodReturnType = null;
+      for (Symbol.TypeVariableSymbol sym : interfaceTypeParameters) {
+        if (types.asSuper(returnType1, sym) != null) {
+          typeOfParamMatchingMethodReturnType = types.asSuper(returnType1, sym);
+          break;
+        }
+      }
+      if (typeOfParamMatchingMethodReturnType != null) {
+        List<Attribute.TypeCompound> annotationsType1 =
+            typeOfParamMatchingMethodReturnType.getUpperBound().getAnnotationMirrors();
+        List<Attribute.TypeCompound> annotationsType2 =
+            returnType1.getUpperBound().getAnnotationMirrors();
+        boolean hasNullableAnnotation = false;
+        for (Attribute.TypeCompound annotation : annotationsType1) {
+          if (annotation
+              .getAnnotationType()
+              .toString()
+              .equals("org.jspecify.annotations.Nullable")) {
+            hasNullableAnnotation = true;
+            break;
+          }
+        }
+        for (Attribute.TypeCompound annotation : annotationsType2) {
+          if (annotation
+              .getAnnotationType()
+              .toString()
+              .equals("org.jspecify.annotations.Nullable")) {
+            if (hasNullableAnnotation) {
+              matchNullness2 = true;
+            } else {
+              matchNullness2 = false;
+            }
+            break;
+          }
+        }
+      }
+    }
+    return matchNullness2 == matchNullness;
   }
 
   @Override

@@ -575,6 +575,7 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             "  }",
             " }",
             " static void useTestFunc(String s) {",
+            "    // BUG: Diagnostic contains: Cannot assign",
             "    Fn<String,String> f = new TestFunc();",
             "     String t = f.apply(s);",
             " }",
