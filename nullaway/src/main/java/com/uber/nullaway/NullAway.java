@@ -2476,6 +2476,9 @@ public class NullAway extends BugChecker
   }
 
   private boolean isNullableObject(VisitorState state, ExpressionTree baseExpression) {
+    if (!config.isJSpecifyMode()) {
+      return false;
+    }
     TreePath path =
         NullabilityUtil.findEnclosingMethodOrLambdaOrInitializer(
             state.getPath(), ImmutableSet.of(Tree.Kind.ASSERT));
