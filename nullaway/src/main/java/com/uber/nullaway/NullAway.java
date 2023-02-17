@@ -1073,7 +1073,7 @@ public class NullAway extends BugChecker
         }
       }
     }
-    return matchNullness2 == matchNullness;
+    return matchNullness == matchNullness2;
   }
 
   @Override
