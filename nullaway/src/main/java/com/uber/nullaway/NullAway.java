@@ -112,6 +112,7 @@ import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.NestingKind;
 import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeVariable;
 import org.checkerframework.nullaway.dataflow.cfg.node.MethodInvocationNode;
 import org.checkerframework.nullaway.javacutil.ElementUtils;
 import org.checkerframework.nullaway.javacutil.TreeUtils;
@@ -717,6 +718,8 @@ public class NullAway extends BugChecker
     // -XepOpt:NullAway:AcknowledgeRestrictiveAnnotations flag and its handler).
     if (isOverriddenMethodAnnotated) {
       for (int i = 0; i < superParamSymbols.size(); i++) {
+        // TODO for jspecify, also handle here the case of a generic overriddenMethod where
+        // parameter is null after generic type instantiation
         overriddenMethodArgNullnessMap[i] =
             Nullness.paramHasNullableAnnotation(overriddenMethod, i, config)
                 ? Nullness.NULLABLE
@@ -909,7 +912,22 @@ public class NullAway extends BugChecker
     Nullness overriddenMethodReturnNullness =
         Nullness.NULLABLE; // Permissive default for unannotated code.
     if (isOverriddenMethodAnnotated && !Nullness.hasNullableAnnotation(overriddenMethod, config)) {
-      overriddenMethodReturnNullness = Nullness.NONNULL;
+      // in jspecify mode, if overridden method's return type is a type variable, instantiate the
+      // type variable for the subtype and check if it becomes @Nullable
+      if (config.isJSpecifyMode()
+          && overriddenMethod.type.getReturnType() instanceof TypeVariable) {
+        Type.MethodType type =
+            (Type.MethodType)
+                state.getTypes().memberType(overridingMethod.owner.type, overriddenMethod);
+        Type returnType = type.getReturnType();
+        boolean returnTypeIsNullable =
+            Nullness.hasNullableAnnotation(returnType.getAnnotationMirrors().stream(), config);
+        if (!returnTypeIsNullable) {
+          overriddenMethodReturnNullness = Nullness.NONNULL;
+        }
+      } else {
+        overriddenMethodReturnNullness = Nullness.NONNULL;
+      }
     }
     overriddenMethodReturnNullness =
         handler.onOverrideMethodInvocationReturnNullability(

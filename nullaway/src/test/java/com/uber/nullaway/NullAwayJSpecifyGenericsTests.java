@@ -488,6 +488,34 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
         .doTest();
   }
 
+  @Test
+  public void testOverride() {
+    makeHelper()
+        .addSourceLines(
+            "Fn.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "  interface Fn<P extends @Nullable Object, R extends @Nullable Object> {\n"
+                + "    R apply(P p);\n"
+                + "  }")
+        .addSourceLines(
+            "TestFunc2.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "class TestFunc2 implements Fn<String,@Nullable String> { // P => @NonNull String, R => @Nullable String\n"
+                + "\n"
+                + "    // This override is ok, but NullAway currently rejects it, since NullAway will treat the return type R\n"
+                + "    // from the interface as always being @NonNull.\n"
+                + "    // But, in this class, R maps to @Nullable String, which matches the return type, so we should not\n"
+                + "    // report an error.\n"
+                + "    @Override\n"
+                + "    public @Nullable String apply(String s) {\n"
+                + "      return null;\n"
+                + "    }\n"
+                + "  }")
+        .doTest();
+  }
+
   private CompilationTestHelper makeHelper() {
     return makeTestHelperWithArgs(
         Arrays.asList(
