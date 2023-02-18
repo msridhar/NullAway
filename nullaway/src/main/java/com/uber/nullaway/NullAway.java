@@ -2453,7 +2453,7 @@ public class NullAway extends BugChecker
       }
     }
     // check for null dereference
-    if (mayBeNullExpr(state, baseExpression) || isNullableObject(state, baseExpression)) {
+    if (mayBeNullExpr(state, baseExpression)) {
       final String message =
           "dereferenced expression " + state.getSourceForNode(baseExpression) + " is @Nullable";
       ErrorMessage errorMessage = new ErrorMessage(MessageTypes.DEREFERENCE_NULLABLE, message);
@@ -2473,62 +2473,6 @@ public class NullAway extends BugChecker
     }
 
     return Description.NO_MATCH;
-  }
-
-  private boolean isNullableObject(VisitorState state, ExpressionTree baseExpression) {
-    if (!config.isJSpecifyMode()) {
-      return false;
-    }
-    TreePath path =
-        NullabilityUtil.findEnclosingMethodOrLambdaOrInitializer(
-            state.getPath(), ImmutableSet.of(Tree.Kind.ASSERT));
-    Tree methodTree = path.getLeaf();
-    boolean hasNullableAnnotation = false;
-    if (methodTree instanceof MethodTree) {
-      BlockTree methodBody = ((MethodTree) methodTree).getBody();
-      if (methodBody != null && !methodBody.getStatements().isEmpty()) {
-        List<? extends StatementTree> statements = methodBody.getStatements();
-        for (StatementTree statement : statements) {
-          if (statement instanceof AssignmentTree) {
-            if (((AssignmentTree) statement).getVariable().equals(baseExpression)) {
-              Type type = ASTHelpers.getType(((AssignmentTree) statement).getExpression());
-              List<Attribute.TypeCompound> lhsAnnotations = type.getAnnotationMirrors();
-              // To ensure that we are checking only jspecify nullable annotations
-              for (Attribute.TypeCompound annotation : lhsAnnotations) {
-                if (annotation
-                    .getAnnotationType()
-                    .toString()
-                    .equals("org.jspecify.annotations.Nullable")) {
-                  hasNullableAnnotation = true;
-                } else {
-                  hasNullableAnnotation = false;
-                }
-              }
-            }
-          } else if (statement instanceof VariableTree) {
-            VariableTree varTree = (VariableTree) statement;
-            if (baseExpression instanceof JCTree.JCIdent
-                && ((JCTree.JCVariableDecl) varTree)
-                    .name.equals(((JCTree.JCIdent) baseExpression).name)) {
-              Type type = ASTHelpers.getType(varTree.getInitializer());
-              List<Attribute.TypeCompound> lhsAnnotations = type.getAnnotationMirrors();
-              // To ensure that we are checking only jspecify nullable annotations
-              for (Attribute.TypeCompound annotation : lhsAnnotations) {
-                if (annotation
-                    .getAnnotationType()
-                    .toString()
-                    .equals("org.jspecify.annotations.Nullable")) {
-                  hasNullableAnnotation = true;
-                } else {
-                  hasNullableAnnotation = false;
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-    return hasNullableAnnotation;
   }
 
   private static boolean isThisIdentifier(ExpressionTree expressionTree) {

@@ -1011,6 +1011,9 @@ public class AccessPathNullnessPropagation
         || !Nullness.hasNullableAnnotation((Symbol) node.getTarget().getMethod(), config)) {
       // definite non-null return
       nullness = NONNULL;
+      if (node.getType() instanceof Type.ClassType) {
+        nullness = NULLABLE;
+      }
     } else {
       // rely on dataflow, assuming nullable if no fact
       nullness = input.getRegularStore().valueOfMethodCall(node, state, NULLABLE, apContext);
