@@ -1011,7 +1011,7 @@ public class AccessPathNullnessPropagation
         || !Nullness.hasNullableAnnotation((Symbol) node.getTarget().getMethod(), config)) {
       // definite non-null return
       nullness = NONNULL;
-      if (node.getType() instanceof Type.ClassType) {
+      if (node.getType() instanceof Type.ClassType && config.isJSpecifyMode()) {
         nullness = NULLABLE;
       }
     } else {
