@@ -585,6 +585,34 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
         .doTest();
   }
 
+  @Test
+  public void methodMatchNullableAnnotatedMethod() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "class Test {",
+            "  interface Fn<P extends @Nullable Object, R> {",
+            "   @Nullable R apply(P p);",
+            "  }",
+            " static class TestFunc implements Fn<String, String> {",
+            "  @Override",
+            "  //This override is fine and is handled by the current code",
+            "  public @Nullable String apply(String s) {",
+            "   return s;",
+            "  }",
+            " }",
+            " static void useTestFunc(String s) {",
+            "    Fn<String, String> f = new TestFunc();",
+            "    String t = f.apply(s);",
+            "    // BUG: Diagnostic contains: dereferenced expression",
+            "     t.hashCode();",
+            " }",
+            "}")
+        .doTest();
+  }
+
   private CompilationTestHelper makeHelper() {
     return makeTestHelperWithArgs(
         Arrays.asList(

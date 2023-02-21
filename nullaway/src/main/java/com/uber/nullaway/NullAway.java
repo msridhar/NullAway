@@ -970,6 +970,45 @@ public class NullAway extends BugChecker
             overriddenMethod);
       }
     }
+    // TODO: need to merge this in the previous code
+    // the method return type annotation is NonNull but the Type parameter annotation is Nullable
+    boolean overridingMethodHasNullableReturnType =
+        Nullness.hasNullableAnnotation(
+            overridingMethod.getReturnType().getAnnotationMirrors().stream(), config);
+    if (!overridingMethodHasNullableReturnType
+        && shouldReportAnError(overriddenMethod, overridingMethod, state)
+        && (memberReferenceTree == null
+            || getComputedNullness(memberReferenceTree).equals(Nullness.NULLABLE))) {
+      // report error here
+      String message;
+      if (memberReferenceTree != null) {
+        message =
+            "referenced method returns @Nullable, but functional interface method "
+                + ASTHelpers.enclosingClass(overriddenMethod)
+                + "."
+                + overriddenMethod.toString()
+                + " returns @NonNull";
+
+      } else {
+        message =
+            "method returns @Nullable, but superclass method "
+                + ASTHelpers.enclosingClass(overriddenMethod)
+                + "."
+                + overriddenMethod.toString()
+                + " returns @NonNull";
+      }
+
+      Tree errorTree =
+          memberReferenceTree != null
+              ? memberReferenceTree
+              : getTreesInstance(state).getTree(overridingMethod);
+      return errorBuilder.createErrorDescription(
+          new ErrorMessage(MessageTypes.WRONG_OVERRIDE_RETURN, message),
+          buildDescription(errorTree),
+          state,
+          overriddenMethod);
+    }
+
     // if any parameter in the super method is annotated @Nullable,
     // overriding method cannot assume @Nonnull
     return checkParamOverriding(
