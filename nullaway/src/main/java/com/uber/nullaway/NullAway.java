@@ -970,7 +970,8 @@ public class NullAway extends BugChecker
             overriddenMethod);
       }
     }
-    // TODO: need to merge this in the previous code
+    /*
+    // TODO: need to merge this in the previous code for the cases where the annotations don't match
     // the method return type annotation is NonNull but the Type parameter annotation is Nullable
     boolean overridingMethodHasNullableReturnType =
         Nullness.hasNullableAnnotation(
@@ -1007,7 +1008,7 @@ public class NullAway extends BugChecker
           buildDescription(errorTree),
           state,
           overriddenMethod);
-    }
+    }*/
 
     // if any parameter in the super method is annotated @Nullable,
     // overriding method cannot assume @Nonnull
