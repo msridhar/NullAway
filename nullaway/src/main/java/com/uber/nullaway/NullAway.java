@@ -930,8 +930,7 @@ public class NullAway extends BugChecker
       if (isOverridingMethodAnnotated && Nullness.hasNullableAnnotation(overridingMethod, config)) {
         overridingMethodReturnNullness = Nullness.NULLABLE;
       }
-      overridingMethodReturnNullness =
-          overridingMethodReturnNullness(overriddenMethod, overridingMethod, state);
+      boolean shouldReportAnError = shouldReportAnError(overriddenMethod, overridingMethod, state);
       // We must once again check the handler chain, to allow it to update nullability of the
       // overriding method
       // (e.g. through AcknowledgeRestrictiveAnnotations=true)
@@ -939,6 +938,7 @@ public class NullAway extends BugChecker
           handler.onOverrideMethodInvocationReturnNullability(
               overridingMethod, state, isOverridingMethodAnnotated, overridingMethodReturnNullness);
       if (overridingMethodReturnNullness.equals(Nullness.NULLABLE)
+          && shouldReportAnError
           && (memberReferenceTree == null
               || getComputedNullness(memberReferenceTree).equals(Nullness.NULLABLE))) {
         String message;
@@ -976,24 +976,40 @@ public class NullAway extends BugChecker
         overridingMethod.getParameters(), overriddenMethod, null, memberReferenceTree, state);
   }
 
-  public Nullness overridingMethodReturnNullness(
+  // here we are checking if we should report an error on not considering the @Nullable annotations
+  // for overriden and
+  // overriding method return type should be consistent with the type parameter
+  public boolean shouldReportAnError(
       Symbol.MethodSymbol overriddenMethod,
       Symbol.MethodSymbol overridingMethod,
       VisitorState state) {
+    // method return type is of type Type variable
     if (config.isJSpecifyMode() && overriddenMethod.type.getReturnType() instanceof TypeVariable) {
+      // type of the type variable in the overridden class (here we will get R now need to check if
+      // the type of R
+      // matches the return type of the method
       Type.MethodType type =
           (Type.MethodType)
               state.getTypes().memberType(overridingMethod.owner.type, overriddenMethod);
-      Type returnType = type.getReturnType();
+      Type returnType = type.getReturnType(); // this is type of the type parameter
       boolean returnTypeIsNullable =
           Nullness.hasNullableAnnotation(returnType.getAnnotationMirrors().stream(), config);
-      if (!returnTypeIsNullable) {
-        return Nullness.NONNULL;
+      // return type of the overriding method
+      Type overridingMethodReturnType = overridingMethod.getReturnType();
+      boolean overridingMethodReturnTypeIsNullable =
+          Nullness.hasNullableAnnotation(
+              overridingMethodReturnType.getAnnotationMirrors().stream(), config);
+      if ((returnTypeIsNullable && overridingMethodReturnTypeIsNullable)
+          || (!returnTypeIsNullable && !overridingMethodReturnTypeIsNullable)) {
+        // don't report an error here as the return type and the type parameters have the same
+        // annotations
+        return false;
       }
-    } else {
-      return Nullness.NONNULL;
     }
-    return Nullness.NULL;
+    // report an error as the parameters don't have the same annotations
+    // TODO: if they don't have the same aanotations but the return type is non null then also we
+    // need to generate an error
+    return true;
   }
 
   @Override
