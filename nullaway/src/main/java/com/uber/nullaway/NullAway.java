@@ -970,50 +970,44 @@ public class NullAway extends BugChecker
             overriddenMethod);
       }
     }
-    /*
+
     // TODO: need to merge this in the previous code for the cases where the annotations don't match
     // the method return type annotation is NonNull but the Type parameter annotation is Nullable
-    boolean overridingMethodHasNullableReturnType =
-        Nullness.hasNullableAnnotation(
-            overridingMethod.getReturnType().getAnnotationMirrors().stream(), config);
-    if (!overridingMethodHasNullableReturnType
-        && shouldReportAnError(overriddenMethod, overridingMethod, state)
-        && (memberReferenceTree == null
-            || getComputedNullness(memberReferenceTree).equals(Nullness.NULLABLE))) {
-      // report error here
-      String message;
-      if (memberReferenceTree != null) {
-        message =
-            "referenced method returns @Nullable, but functional interface method "
-                + ASTHelpers.enclosingClass(overriddenMethod)
-                + "."
-                + overriddenMethod.toString()
-                + " returns @NonNull";
 
-      } else {
-        message =
-            "method returns @Nullable, but superclass method "
-                + ASTHelpers.enclosingClass(overriddenMethod)
-                + "."
-                + overriddenMethod.toString()
-                + " returns @NonNull";
+    boolean overridingMethodHasNullableReturnType = true;
+    Type overridingMethodReturnType = overridingMethod.getReturnType();
+    if (overridingMethodReturnType == null) {
+      overridingMethodHasNullableReturnType = true;
+    } else {
+      if (overridingMethodReturnType.getAnnotationMirrors() != null) {
+        overridingMethodHasNullableReturnType =
+            Nullness.hasNullableAnnotation(
+                overridingMethodReturnType.getAnnotationMirrors().stream(), config);
       }
-
-      Tree errorTree =
-          memberReferenceTree != null
-              ? memberReferenceTree
-              : getTreesInstance(state).getTree(overridingMethod);
-      return errorBuilder.createErrorDescription(
-          new ErrorMessage(MessageTypes.WRONG_OVERRIDE_RETURN, message),
-          buildDescription(errorTree),
-          state,
-          overriddenMethod);
+    }
+    /*if (!overridingMethodHasNullableReturnType
+        && shouldReportAnError(overriddenMethod, overridingMethod, state)) {
+      // report error here
+      String message = "temp error message";
+     System.err.println(message + overridingMethod.toString() + overriddenMethod.toString());
     }*/
-
     // if any parameter in the super method is annotated @Nullable,
     // overriding method cannot assume @Nonnull
-    return checkParamOverriding(
-        overridingMethod.getParameters(), overriddenMethod, null, memberReferenceTree, state);
+    Description description =
+        checkParamOverriding(
+            overridingMethod.getParameters(), overriddenMethod, null, memberReferenceTree, state);
+    if (overridingMethod != null
+        && description == Description.NO_MATCH
+        && !overridingMethodHasNullableReturnType
+        && shouldReportAnError(overriddenMethod, overridingMethod, state)) {
+      String message = "temp error message ";
+      System.err.println(message);
+      ErrorMessage errorMessage =
+          new ErrorMessage(
+              ErrorMessage.MessageTypes.ASSIGN_GENERIC_NULLABLE, String.format(message));
+      System.err.println(errorMessage);
+    }
+    return description;
   }
 
   // here we are checking if we should report an error on not considering the @Nullable annotations
@@ -1047,7 +1041,7 @@ public class NullAway extends BugChecker
       }
     }
     // report an error as the parameters don't have the same annotations
-    // TODO: if they don't have the same aanotations but the return type is non null then also we
+    // TODO: if they don't have the same annotations but the return type is non null then also we
     // need to generate an error
     return true;
   }
