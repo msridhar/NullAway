@@ -999,13 +999,22 @@ public class NullAway extends BugChecker
     if (overridingMethod != null
         && description == Description.NO_MATCH
         && !overridingMethodHasNullableReturnType
-        && shouldReportAnError(overriddenMethod, overridingMethod, state)) {
-      String message = "temp error message ";
-      System.err.println(message);
-      ErrorMessage errorMessage =
-          new ErrorMessage(
-              ErrorMessage.MessageTypes.ASSIGN_GENERIC_NULLABLE, String.format(message));
-      System.err.println(errorMessage);
+        && shouldReportAnError(overriddenMethod, overridingMethod, state)
+        && (memberReferenceTree == null
+            || getComputedNullness(memberReferenceTree).equals(Nullness.NULLABLE))) {
+      String message = "<<<<<<< temp error message >>>>>>>>";
+      Tree errorTree =
+          memberReferenceTree != null
+              ? memberReferenceTree
+              : getTreesInstance(state).getTree(overridingMethod);
+      if (errorTree != null) {
+        state.reportMatch(
+            errorBuilder.createErrorDescription(
+                new ErrorMessage(MessageTypes.ASSIGN_GENERIC_NULLABLE, message),
+                buildDescription(errorTree),
+                state,
+                overriddenMethod));
+      }
     }
     return description;
   }

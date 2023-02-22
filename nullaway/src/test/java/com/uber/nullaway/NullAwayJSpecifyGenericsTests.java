@@ -571,6 +571,7 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             " static class TestFunc implements Fn<String,  @Nullable String> {",
             "  @Override",
             "  //there should be an error here as the return type does not match the Type parameter  ",
+            "    // BUG: Diagnostic contains: temp error message",
             "  public String apply(String s) {",
             "   return s;",
             "  }",
