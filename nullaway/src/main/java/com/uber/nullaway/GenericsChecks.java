@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
+import javax.lang.model.type.TypeVariable;
 
 /** Methods for performing checks related to generic types and nullability. */
 public final class GenericsChecks {
@@ -359,5 +360,41 @@ public final class GenericsChecks {
         new Type.ClassType(
             type.getEnclosingType(), com.sun.tools.javac.util.List.from(newTypeArgs), type.tsym);
     return finalType;
+  }
+  // here we are checking if we should report an error on not considering the @Nullable annotations
+  // for overriden and
+  // overriding method return type should be consistent with the type parameter
+  public boolean shouldReportAnError(
+      Symbol.MethodSymbol overriddenMethod,
+      Symbol.MethodSymbol overridingMethod,
+      VisitorState state) {
+    // method return type is of type Type variable
+    if (config.isJSpecifyMode() && overriddenMethod.type.getReturnType() instanceof TypeVariable) {
+      // type of the type variable in the overridden class (here we will get R now need to check if
+      // the type of R
+      // matches the return type of the method
+      Type.MethodType type =
+          (Type.MethodType)
+              state.getTypes().memberType(overridingMethod.owner.type, overriddenMethod);
+      Type returnType = type.getReturnType(); // this is type of the type parameter
+      // return type of the overriding method
+      Type overridingMethodReturnType = overridingMethod.getReturnType();
+
+      if (returnType instanceof Type.ClassType
+          && overridingMethodReturnType instanceof Type.ClassType) {
+        boolean doNullabilityAnnotationsMatch =
+            compareNullabilityAnnotations(
+                (Type.ClassType) returnType, (Type.ClassType) overridingMethodReturnType);
+        if (doNullabilityAnnotationsMatch) {
+          // don't report an error here as the return type and the type parameters have the same
+          // annotations
+          return false;
+        }
+      }
+    }
+    // report an error as the parameters don't have the same annotations
+    // TODO: if they don't have the same annotations but the return type is non null then also we
+    // need to generate an error
+    return true;
   }
 }

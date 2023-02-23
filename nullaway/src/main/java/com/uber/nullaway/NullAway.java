@@ -112,7 +112,6 @@ import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.NestingKind;
 import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeVariable;
 import org.checkerframework.nullaway.dataflow.cfg.node.MethodInvocationNode;
 import org.checkerframework.nullaway.javacutil.ElementUtils;
 import org.checkerframework.nullaway.javacutil.TreeUtils;
@@ -930,7 +929,9 @@ public class NullAway extends BugChecker
       if (isOverridingMethodAnnotated && Nullness.hasNullableAnnotation(overridingMethod, config)) {
         overridingMethodReturnNullness = Nullness.NULLABLE;
       }
-      boolean shouldReportAnError = shouldReportAnError(overriddenMethod, overridingMethod, state);
+      boolean shouldReportAnError =
+          new GenericsChecks(state, config, this)
+              .shouldReportAnError(overriddenMethod, overridingMethod, state);
       // We must once again check the handler chain, to allow it to update nullability of the
       // overriding method
       // (e.g. through AcknowledgeRestrictiveAnnotations=true)
@@ -999,11 +1000,14 @@ public class NullAway extends BugChecker
     if (overridingMethod != null
         && description == Description.NO_MATCH
         && !overridingMethodHasNullableReturnType
-        && shouldReportAnError(overriddenMethod, overridingMethod, state)
+        && new GenericsChecks(state, config, this)
+            .shouldReportAnError(overriddenMethod, overridingMethod, state)
         && (memberReferenceTree == null
             || getComputedNullness(memberReferenceTree).equals(Nullness.NULLABLE))) {
       String message = "<<<<<<< temp error message >>>>>>>>";
-      Tree errorTree =
+      // TODO: need to report an error here
+      System.err.println(message);
+      /* Tree errorTree =
           memberReferenceTree != null
               ? memberReferenceTree
               : getTreesInstance(state).getTree(overridingMethod);
@@ -1014,45 +1018,9 @@ public class NullAway extends BugChecker
                 buildDescription(errorTree),
                 state,
                 overriddenMethod));
-      }
+      }*/
     }
     return description;
-  }
-
-  // here we are checking if we should report an error on not considering the @Nullable annotations
-  // for overriden and
-  // overriding method return type should be consistent with the type parameter
-  public boolean shouldReportAnError(
-      Symbol.MethodSymbol overriddenMethod,
-      Symbol.MethodSymbol overridingMethod,
-      VisitorState state) {
-    // method return type is of type Type variable
-    if (config.isJSpecifyMode() && overriddenMethod.type.getReturnType() instanceof TypeVariable) {
-      // type of the type variable in the overridden class (here we will get R now need to check if
-      // the type of R
-      // matches the return type of the method
-      Type.MethodType type =
-          (Type.MethodType)
-              state.getTypes().memberType(overridingMethod.owner.type, overriddenMethod);
-      Type returnType = type.getReturnType(); // this is type of the type parameter
-      boolean returnTypeIsNullable =
-          Nullness.hasNullableAnnotation(returnType.getAnnotationMirrors().stream(), config);
-      // return type of the overriding method
-      Type overridingMethodReturnType = overridingMethod.getReturnType();
-      boolean overridingMethodReturnTypeIsNullable =
-          Nullness.hasNullableAnnotation(
-              overridingMethodReturnType.getAnnotationMirrors().stream(), config);
-      if ((returnTypeIsNullable && overridingMethodReturnTypeIsNullable)
-          || (!returnTypeIsNullable && !overridingMethodReturnTypeIsNullable)) {
-        // don't report an error here as the return type and the type parameters have the same
-        // annotations
-        return false;
-      }
-    }
-    // report an error as the parameters don't have the same annotations
-    // TODO: if they don't have the same annotations but the return type is non null then also we
-    // need to generate an error
-    return true;
   }
 
   @Override
