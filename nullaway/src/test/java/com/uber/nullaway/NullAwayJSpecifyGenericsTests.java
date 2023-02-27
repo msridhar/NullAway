@@ -568,11 +568,10 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             "  interface Fn<P extends @Nullable Object, R extends @Nullable Object> {",
             "   R apply(P p);",
             "  }",
-            " static class TestFunc implements Fn<String,  @Nullable String> {",
+            " static class TestFunc implements Fn<String, @Nullable String> {",
             "  @Override",
             "  //there should be an error here as the return type does not match the Type parameter  ",
-            "    // BUG: Diagnostic contains: temp error message",
-            "  public String apply(String s) {",
+            "  public @Nullable String apply(String s) {",
             "   return s;",
             "  }",
             " }",
@@ -581,6 +580,44 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             "    String t = f.apply(s);",
             "    // BUG: Diagnostic contains: dereferenced expression",
             "     t.hashCode();",
+            " }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void nestedMethodMatch() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "class Test {",
+            "  class P<T extends @Nullable Object>{}",
+            "  interface Fn< T extends P<R>, R extends @Nullable Object> {",
+            "   R apply(String s);",
+            "  }",
+            " static class TestFunc1 implements Fn<P<@Nullable String>, @Nullable String> {",
+            "  @Override",
+            "  public String apply(String s) {",
+            "   return s;",
+            "  }",
+            " }",
+            " static class TestFunc2 implements Fn<P<@Nullable String>, @Nullable String> {",
+            "  @Override",
+            "  public @Nullable String apply(String s) {",
+            "   return s;",
+            "  }",
+            " }",
+            " static void useTestFunc(String s) {",
+            "    Fn<P<@Nullable String>, @Nullable String> f1 = new TestFunc1();",
+            "    String t1 = f1.apply(s);",
+            "    // this is fine as the return type of apply is a non-null string",
+            "     t1.hashCode();",
+            "    Fn<P<@Nullable String>, @Nullable String> f2 = new TestFunc2();",
+            "    String t2 = f2.apply(s);",
+            "    // BUG: Diagnostic contains: dereferenced expression",
+            "     t2.hashCode();",
             " }",
             "}")
         .doTest();

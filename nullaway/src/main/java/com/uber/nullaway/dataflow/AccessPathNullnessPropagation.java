@@ -33,6 +33,7 @@ import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.TypeTag;
 import com.uber.nullaway.CodeAnnotationInfo;
 import com.uber.nullaway.Config;
+import com.uber.nullaway.GenericsChecks;
 import com.uber.nullaway.NullabilityUtil;
 import com.uber.nullaway.Nullness;
 import com.uber.nullaway.handlers.Handler;
@@ -1011,8 +1012,8 @@ public class AccessPathNullnessPropagation
         || !Nullness.hasNullableAnnotation((Symbol) node.getTarget().getMethod(), config)) {
       // definite non-null return
       nullness = NONNULL;
-      if (node.getType() instanceof Type.ClassType && config.isJSpecifyMode()) {
-        nullness = NULLABLE;
+      if (node != null && node.getType() instanceof Type.ClassType && config.isJSpecifyMode()) {
+        nullness = GenericsChecks.getActualAnnotation(node, config, state);
       }
     } else {
       // rely on dataflow, assuming nullable if no fact

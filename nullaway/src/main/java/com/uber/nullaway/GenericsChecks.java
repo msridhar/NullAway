@@ -27,6 +27,8 @@ import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
 import javax.lang.model.type.TypeVariable;
+import org.checkerframework.nullaway.dataflow.cfg.node.MethodInvocationNode;
+import org.checkerframework.nullaway.dataflow.cfg.node.Node;
 
 /** Methods for performing checks related to generic types and nullability. */
 public final class GenericsChecks {
@@ -368,8 +370,10 @@ public final class GenericsChecks {
       Symbol.MethodSymbol overriddenMethod,
       Symbol.MethodSymbol overridingMethod,
       VisitorState state) {
+
     // method return type is of type Type variable
     if (config.isJSpecifyMode() && overriddenMethod.type.getReturnType() instanceof TypeVariable) {
+
       // type of the type variable in the overridden class (here we will get R now need to check if
       // the type of R
       // matches the return type of the method
@@ -380,21 +384,94 @@ public final class GenericsChecks {
       // return type of the overriding method
       Type overridingMethodReturnType = overridingMethod.getReturnType();
 
+      boolean hasNullableAnnotation1 =
+          Nullness.hasNullableAnnotation(returnType.getAnnotationMirrors().stream(), config);
+
+      boolean hasNullableAnnotation2 =
+          Nullness.hasNullableAnnotation(
+              overridingMethodReturnType.getAnnotationMirrors().stream(), config);
+
+      if (hasNullableAnnotation1 != hasNullableAnnotation2) {
+        return true;
+      }
+
       if (returnType instanceof Type.ClassType
           && overridingMethodReturnType instanceof Type.ClassType) {
         boolean doNullabilityAnnotationsMatch =
             compareNullabilityAnnotations(
                 (Type.ClassType) returnType, (Type.ClassType) overridingMethodReturnType);
-        if (doNullabilityAnnotationsMatch) {
+        if (!doNullabilityAnnotationsMatch) {
           // don't report an error here as the return type and the type parameters have the same
           // annotations
-          return false;
+          return true;
         }
       }
     }
-    // report an error as the parameters don't have the same annotations
-    // TODO: if they don't have the same annotations but the return type is non null then also we
-    // need to generate an error
-    return true;
+
+    return false;
+  }
+
+  /**
+   * if a method has Nullable return type, only then the shouldReportAnError will be called. if the
+   * annotation of R is Nullable and the return types match
+   * node.getTarget().getReceiver().getBlock().getNodes().get(0).rhs.type.tsym
+   */
+  public static Nullness getActualAnnotation(
+      MethodInvocationNode node, Config config, VisitorState state) {
+    Type.ClassType type = getNodeClass(node, state, config);
+    if (type == null) {
+      return Nullness.NONNULL;
+    }
+    // type - com.uber.Test.TestFunc2
+    // need to find the method matching the invoked method
+    boolean hasNullableAnnotation = getMethodAnnotation(type, node, config, state);
+    // Nullness.hasNullableAnnotation(type.getAnnotationMirrors().stream(), config);
+
+    if (hasNullableAnnotation) {
+      return Nullness.NULLABLE;
+    } else {
+      return Nullness.NONNULL;
+    }
+  }
+
+  @SuppressWarnings({"UnusedVariable"})
+  private static boolean getMethodAnnotation(
+      Type.ClassType type, MethodInvocationNode node, Config config, VisitorState state) {
+    Symbol.TypeSymbol sym = type.tsym;
+    if (sym instanceof Symbol.ClassSymbol) {
+      Symbol.ClassSymbol classSym = (Symbol.ClassSymbol) type.tsym;
+      Symbol methSym =
+          classSym.members_field.findFirst(
+              (com.sun.tools.javac.util.Name) node.getTarget().getMethod().getSimpleName());
+      // matching method found
+      if (methSym != null) {
+        Type returnType = methSym.type.getReturnType();
+        return Nullness.hasNullableAnnotation(returnType.getAnnotationMirrors().stream(), config);
+      }
+    }
+    return false;
+  }
+
+  @Nullable
+  public static Type.ClassType getNodeClass(
+      MethodInvocationNode node, VisitorState state, Config config) {
+    List<Node> nodes = node.getTarget().getReceiver().getBlock().getNodes();
+    for (int i = nodes.size() - 1; i >= 0; i--) {
+      if (nodes.get(i).getTree() instanceof AssignmentTree) {
+        return (Type.ClassType)
+            ASTHelpers.getType(((AssignmentTree) nodes.get(i).getTree()).getExpression());
+      } else if (nodes.get(i).getTree() instanceof VariableTree) {
+        /*nodes.get(i).getTree().name*/
+
+        if (ASTHelpers.getSymbol(node.getTarget().getReceiver().getTree())
+            .equals(ASTHelpers.getSymbol(nodes.get(i).getTree()))) {
+
+          return (Type.ClassType)
+              new GenericsChecks(state, config, null)
+                  .getTreeType(((VariableTree) nodes.get(i).getTree()).getInitializer());
+        }
+      }
+    }
+    return null;
   }
 }
