@@ -161,7 +161,7 @@ public final class GenericsChecks {
    * @return Type of the tree with preserved annotations.
    */
   @Nullable
-  public Type getTreeType(Tree tree) {
+  public static Type getTreeType(Tree tree, VisitorState state) {
     if (tree instanceof NewClassTree
         && ((NewClassTree) tree).getIdentifier() instanceof ParameterizedTypeTree) {
       ParameterizedTypeTree paramTypedTree =
@@ -171,7 +171,7 @@ public final class GenericsChecks {
         // TODO: support diamond operators
         return null;
       }
-      return typeWithPreservedAnnotations(paramTypedTree);
+      return typeWithPreservedAnnotations(paramTypedTree, state);
     } else {
       return ASTHelpers.getType(tree);
     }
@@ -206,8 +206,8 @@ public final class GenericsChecks {
     if (rhsTree == null || rhsTree.getKind().equals(Tree.Kind.NULL_LITERAL)) {
       return;
     }
-    Type lhsType = getTreeType(lhsTree);
-    Type rhsType = getTreeType(rhsTree);
+    Type lhsType = getTreeType(lhsTree, state);
+    Type rhsType = getTreeType(rhsTree, state);
 
     if (lhsType instanceof Type.ClassType && rhsType instanceof Type.ClassType) {
       boolean isAssignmentValid =
@@ -229,7 +229,7 @@ public final class GenericsChecks {
     if (methodType.getTypeArguments().isEmpty()) {
       return;
     }
-    Type returnExpressionType = getTreeType(retExpr);
+    Type returnExpressionType = getTreeType(retExpr, state);
     if (methodType instanceof Type.ClassType && returnExpressionType instanceof Type.ClassType) {
       boolean isReturnTypeValid =
           compareNullabilityAnnotations(
@@ -312,7 +312,8 @@ public final class GenericsChecks {
    * @param tree A parameterized typed tree for which we need class type with preserved annotations.
    * @return A Type with preserved annotations.
    */
-  private Type.ClassType typeWithPreservedAnnotations(ParameterizedTypeTree tree) {
+  private static Type.ClassType typeWithPreservedAnnotations(
+      ParameterizedTypeTree tree, VisitorState state) {
     Type.ClassType type = (Type.ClassType) ASTHelpers.getType(tree);
     Preconditions.checkNotNull(type);
     Type nullableType = NULLABLE_TYPE_SUPPLIER.get(state);
@@ -352,7 +353,8 @@ public final class GenericsChecks {
       Type currentTypeArgType = castToNonNull(ASTHelpers.getType(curTypeArg));
       if (currentTypeArgType.getTypeArguments().size() > 0) {
         // nested generic type; recursively preserve its nullability type argument annotations
-        currentTypeArgType = typeWithPreservedAnnotations((ParameterizedTypeTree) curTypeArg);
+        currentTypeArgType =
+            typeWithPreservedAnnotations((ParameterizedTypeTree) curTypeArg, state);
       }
       Type.ClassType newTypeArgType =
           (Type.ClassType) currentTypeArgType.cloneWithMetadata(typeMetadata);
@@ -408,7 +410,7 @@ public final class GenericsChecks {
       }
     }
 
-    return false;
+    return true;
   }
 
   /**
@@ -451,15 +453,21 @@ public final class GenericsChecks {
     }
     return false;
   }
-
+  // the overriding method class accroding to tests, fun1 fun2
   @Nullable
   public static Type.ClassType getNodeClass(
       MethodInvocationNode node, VisitorState state, Config config) {
+    if (node.getTarget().getReceiver().getBlock() == null) {
+      return null;
+    }
     List<Node> nodes = node.getTarget().getReceiver().getBlock().getNodes();
     for (int i = nodes.size() - 1; i >= 0; i--) {
+      if (nodes.get(i).getTree() == null) {
+        continue;
+      }
       if (nodes.get(i).getTree() instanceof AssignmentTree) {
         return (Type.ClassType)
-            ASTHelpers.getType(((AssignmentTree) nodes.get(i).getTree()).getExpression());
+            getTreeType(((AssignmentTree) nodes.get(i).getTree()).getExpression(), state);
       } else if (nodes.get(i).getTree() instanceof VariableTree) {
         /*nodes.get(i).getTree().name*/
 
@@ -467,8 +475,7 @@ public final class GenericsChecks {
             .equals(ASTHelpers.getSymbol(nodes.get(i).getTree()))) {
 
           return (Type.ClassType)
-              new GenericsChecks(state, config, null)
-                  .getTreeType(((VariableTree) nodes.get(i).getTree()).getInitializer());
+              getTreeType(((VariableTree) nodes.get(i).getTree()).getInitializer(), state);
         }
       }
     }

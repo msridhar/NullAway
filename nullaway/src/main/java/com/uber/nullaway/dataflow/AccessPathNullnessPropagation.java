@@ -1012,8 +1012,24 @@ public class AccessPathNullnessPropagation
         || !Nullness.hasNullableAnnotation((Symbol) node.getTarget().getMethod(), config)) {
       // definite non-null return
       nullness = NONNULL;
-      if (node != null && node.getType() instanceof Type.ClassType && config.isJSpecifyMode()) {
-        nullness = GenericsChecks.getActualAnnotation(node, config, state);
+      // check only when in JSpecify mode and the method is an interface method
+      if (node != null && config.isJSpecifyMode()) {
+        if (node.getTarget() != null && node.getTarget().getMethod() != null) {
+          if (node.getTarget().getMethod() instanceof Symbol.MethodSymbol) {
+            if (((Symbol.MethodSymbol) node.getTarget().getMethod()).owner.isInterface()) {
+              // should be generic
+              if (!(node.getTarget().getMethod().getReturnType() instanceof Type.TypeVar
+                  || ((Type) node.getTarget().getMethod().getReturnType())
+                          .getTypeArguments()
+                          .length()
+                      > 0)) {
+                nullness = Nullness.NONNULL;
+              } else {
+                nullness = GenericsChecks.getActualAnnotation(node, config, state);
+              }
+            }
+          }
+        }
       }
     } else {
       // rely on dataflow, assuming nullable if no fact
