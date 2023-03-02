@@ -26,9 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
-import javax.lang.model.type.TypeVariable;
 import org.checkerframework.nullaway.dataflow.cfg.node.MethodInvocationNode;
-import org.checkerframework.nullaway.dataflow.cfg.node.Node;
 
 /** Methods for performing checks related to generic types and nullability. */
 public final class GenericsChecks {
@@ -368,13 +366,16 @@ public final class GenericsChecks {
   // here we are checking if we should report an error on not considering the @Nullable annotations
   // for overriden and
   // overriding method return type should be consistent with the type parameter
+  // TODO: Return Nullness if possible
+  // TODO: Should also work for no-Type variables
+  // TODO: share the similar logic with the parameters
   public boolean shouldReportAnError(
       Symbol.MethodSymbol overriddenMethod,
       Symbol.MethodSymbol overridingMethod,
       VisitorState state) {
 
     // method return type is of type Type variable
-    if (config.isJSpecifyMode() && overriddenMethod.type.getReturnType() instanceof TypeVariable) {
+    if (config.isJSpecifyMode()) {
 
       // type of the type variable in the overridden class (here we will get R now need to check if
       // the type of R
@@ -410,23 +411,32 @@ public final class GenericsChecks {
       }
     }
 
-    return true;
+    return false;
   }
 
   /**
    * if a method has Nullable return type, only then the shouldReportAnError will be called. if the
    * annotation of R is Nullable and the return types match
-   * node.getTarget().getReceiver().getBlock().getNodes().get(0).rhs.type.tsym
+   * node.getTarget().getReceiver().getBlock().getNodes().get(0).rhs.type.tsym member type (type of
+   * f1, sym for apply)
    */
   public static Nullness getActualAnnotation(
       MethodInvocationNode node, Config config, VisitorState state) {
-    Type.ClassType type = getNodeClass(node, state, config);
-    if (type == null) {
+    Type type =
+        state
+            .getTypes()
+            .memberType(
+                (Type) node.getTarget().getReceiver().getType(),
+                ASTHelpers.getSymbol(node.getTarget().getTree()));
+    ;
+    if (!(type instanceof Type.MethodType)) {
       return Nullness.NONNULL;
     }
     // type - com.uber.Test.TestFunc2
     // need to find the method matching the invoked method
-    boolean hasNullableAnnotation = getMethodAnnotation(type, node, config, state);
+    boolean hasNullableAnnotation =
+        Nullness.hasNullableAnnotation(
+            type.getReturnType().getAnnotationMirrors().stream(), config);
     // Nullness.hasNullableAnnotation(type.getAnnotationMirrors().stream(), config);
 
     if (hasNullableAnnotation) {
@@ -434,51 +444,5 @@ public final class GenericsChecks {
     } else {
       return Nullness.NONNULL;
     }
-  }
-
-  @SuppressWarnings({"UnusedVariable"})
-  private static boolean getMethodAnnotation(
-      Type.ClassType type, MethodInvocationNode node, Config config, VisitorState state) {
-    Symbol.TypeSymbol sym = type.tsym;
-    if (sym instanceof Symbol.ClassSymbol) {
-      Symbol.ClassSymbol classSym = (Symbol.ClassSymbol) type.tsym;
-      Symbol methSym =
-          classSym.members_field.findFirst(
-              (com.sun.tools.javac.util.Name) node.getTarget().getMethod().getSimpleName());
-      // matching method found
-      if (methSym != null) {
-        Type returnType = methSym.type.getReturnType();
-        return Nullness.hasNullableAnnotation(returnType.getAnnotationMirrors().stream(), config);
-      }
-    }
-    return false;
-  }
-  // the overriding method class accroding to tests, fun1 fun2
-  @Nullable
-  public static Type.ClassType getNodeClass(
-      MethodInvocationNode node, VisitorState state, Config config) {
-    if (node.getTarget().getReceiver().getBlock() == null) {
-      return null;
-    }
-    List<Node> nodes = node.getTarget().getReceiver().getBlock().getNodes();
-    for (int i = nodes.size() - 1; i >= 0; i--) {
-      if (nodes.get(i).getTree() == null) {
-        continue;
-      }
-      if (nodes.get(i).getTree() instanceof AssignmentTree) {
-        return (Type.ClassType)
-            getTreeType(((AssignmentTree) nodes.get(i).getTree()).getExpression(), state);
-      } else if (nodes.get(i).getTree() instanceof VariableTree) {
-        /*nodes.get(i).getTree().name*/
-
-        if (ASTHelpers.getSymbol(node.getTarget().getReceiver().getTree())
-            .equals(ASTHelpers.getSymbol(nodes.get(i).getTree()))) {
-
-          return (Type.ClassType)
-              getTreeType(((VariableTree) nodes.get(i).getTree()).getInitializer(), state);
-        }
-      }
-    }
-    return null;
   }
 }

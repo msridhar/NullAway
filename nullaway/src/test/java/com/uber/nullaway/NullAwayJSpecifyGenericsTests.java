@@ -612,7 +612,7 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             " static void useTestFunc(String s) {",
             "    Fn<P<@Nullable String>, @Nullable String> f1 = new TestFunc1();",
             "    String t1 = f1.apply(s);",
-            "    // this is fine as the return type of apply is a non-null string",
+            "   // BUG: Diagnostic contains: dereferenced expression",
             "     t1.hashCode();",
             "    Fn<P<@Nullable String>, @Nullable String> f2 = new TestFunc2();",
             "    String t2 = f2.apply(s);",

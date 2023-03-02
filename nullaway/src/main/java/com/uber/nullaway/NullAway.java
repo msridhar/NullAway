@@ -938,9 +938,12 @@ public class NullAway extends BugChecker
       if (overridingMethodReturnNullness.equals(Nullness.NULLABLE)
           && (memberReferenceTree == null
               || getComputedNullness(memberReferenceTree).equals(Nullness.NULLABLE))) {
-        boolean shouldReportAnError =
-            new GenericsChecks(state, config, this)
-                .shouldReportAnError(overriddenMethod, overridingMethod, state);
+        boolean shouldReportAnError = true;
+        if (config.isJSpecifyMode()) {
+          shouldReportAnError =
+              new GenericsChecks(state, config, this)
+                  .shouldReportAnError(overriddenMethod, overridingMethod, state);
+        }
         if (shouldReportAnError) {
           String message;
           if (memberReferenceTree != null) {
