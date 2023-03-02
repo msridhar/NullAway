@@ -975,14 +975,8 @@ public class NullAway extends BugChecker
         }
       }
     }
-
-    Type overridingMethodReturnType = overridingMethod.getReturnType();
-    if (overridingMethodReturnType == null) {
-      return checkParamOverriding(
-          overridingMethod.getParameters(), overriddenMethod, null, memberReferenceTree, state);
-    }
-
-    return Description.NO_MATCH;
+    return checkParamOverriding(
+        overridingMethod.getParameters(), overriddenMethod, null, memberReferenceTree, state);
   }
 
   @Override
