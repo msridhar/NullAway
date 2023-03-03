@@ -370,7 +370,7 @@ public final class GenericsChecks {
   // here we are checking if we should report an error on not considering the @Nullable annotations
   // for overriden and
   // overriding method return type should be consistent with the type parameter
-  public boolean shouldReportAnError(
+  public boolean DoNullabilityAnnotationsMatch(
       Symbol.MethodSymbol overriddenMethod,
       Symbol.MethodSymbol overridingMethod,
       VisitorState state) {

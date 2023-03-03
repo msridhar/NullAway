@@ -941,7 +941,7 @@ public class NullAway extends BugChecker
         if (config.isJSpecifyMode()) {
           returnTypeAnnotationsMatchWithOverriddenMethod =
               new GenericsChecks(state, config, this)
-                  .shouldReportAnError(overriddenMethod, overridingMethod, state);
+                  .DoNullabilityAnnotationsMatch(overriddenMethod, overridingMethod, state);
         }
         // if the return type of the overridden method matches the return type of the overriding
         // method
