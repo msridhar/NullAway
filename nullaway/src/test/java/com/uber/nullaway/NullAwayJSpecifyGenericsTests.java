@@ -44,10 +44,6 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             "    NonNullTypeParam<String> t2 = new NonNullTypeParam<@Nullable String>();",
             "    // BUG: Diagnostic contains: Generic type parameter",
             "    testBadNonNull(new NonNullTypeParam<@Nullable String>());",
-            "    testBadNonNull(",
-            "        new NonNullTypeParam<",
-            "            // BUG: Diagnostic contains: Generic type parameter",
-            "            @Nullable String>());",
             "  }",
             "  static void testOkNullable(NullableTypeParam<String> t1, NullableTypeParam<@Nullable String> t2) {",
             "    NullableTypeParam<String> t3 = new NullableTypeParam<String>();",
@@ -557,6 +553,155 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
         .doTest();
   }
 
+  @Test
+  public void genericsChecksForTernaryOperator() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "class Test {",
+            "static class A<T extends @Nullable Object> { }",
+            "  static A<String> testPositive(boolean t) {",
+            "    // BUG: Diagnostic contains: Conditional expression",
+            "    A<@Nullable String> t1 = t ? new A<String>() : new A<@Nullable String>();",
+            "    // BUG: Diagnostic contains: Conditional expression",
+            "    return t ? new A<@Nullable String>() : new A<@Nullable String>();",
+            "  }",
+            "  static A<@Nullable String> testNegative(boolean t) {",
+            "    A<@Nullable String> t1 = t ? new A<@Nullable String>() : new A<@Nullable String>();",
+            "    return t ? new A<@Nullable String>() : new A<@Nullable String>();",
+            "  }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void ternaryOperatorComplexSubtyping() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "class Test {",
+            "  static class A<T extends @Nullable Object> {}",
+            "  static class B<T extends @Nullable Object> extends A<T> {}",
+            "  static class C<T extends @Nullable Object> extends A<T> {}",
+            "  static void testPositive(boolean t) {",
+            "    // BUG: Diagnostic contains: Conditional expression",
+            "    A<@Nullable String> t1 = t ? new B<@Nullable String>() : new C<String>();",
+            "    // BUG: Diagnostic contains: Conditional expression",
+            "    A<@Nullable String> t2 = t ? new C<String>() : new B<@Nullable String>();",
+            "    // BUG: Diagnostic contains: Conditional expression",
+            "    A<@Nullable String> t3 = t ? new B<String>() : new C<@Nullable String>();",
+            "    // BUG: Diagnostic contains: Conditional expression",
+            "    A<String> t4 = t ? new B<@Nullable String>() : new C<@Nullable String>();",
+            "  }",
+            "  static void testNegative(boolean t) {",
+            "    A<@Nullable String> t1 = t ? new B<@Nullable String>() : new C<@Nullable String>();",
+            "    A<@Nullable String> t2 = t ? new C<@Nullable String>() : new B<@Nullable String>();",
+            "    A<String> t3 = t ? new C<String>() : new B<String>();",
+            "  }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void nestedTernary() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "class Test {",
+            "  static class A<T extends @Nullable Object> {}",
+            "  static class B<T extends @Nullable Object> extends A<T> {}",
+            "  static class C<T extends @Nullable Object> extends A<T> {}",
+            "  static void testPositive(boolean t) {",
+            "    A<@Nullable String> t1 = t ? new C<@Nullable String>() :",
+            "        // BUG: Diagnostic contains: Conditional expression",
+            "        (t ? new B<@Nullable String>() : new A<String>());",
+            "  }",
+            "  static void testNegative(boolean t) {",
+            "    A<@Nullable String> t1 = t ? new C<@Nullable String>() :",
+            "        (t ? new B<@Nullable String>() : new A<@Nullable String>());",
+            "  }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void ternaryMismatchedAssignmentContext() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "class Test {",
+            "static class A<T extends @Nullable Object> { }",
+            "  static void testPositive(boolean t) {",
+            "    // we get two errors here, one for each sub-expression; perhaps ideally we would report",
+            "    // just one error (that the ternary operator has type A<String> but the assignment LHS",
+            "    // has type A<@Nullable String>), but implementing that check in general is",
+            "    // a bit tricky",
+            "    A<@Nullable String> t1 = t",
+            "        // BUG: Diagnostic contains: Conditional expression must have type",
+            "        ? new A<String>()",
+            "        // BUG: Diagnostic contains: Conditional expression must have type",
+            "        : new A<String>();",
+            "  }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void parameterPassing() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "class Test {",
+            "static class A<T extends @Nullable Object> { }",
+            "  static A<String> sampleMethod(A<A<String>> a1, A<String> a2) {",
+            "     return a2;",
+            "  }",
+            "  static void testPositive(A<A<@Nullable String>> a1, A<String> a2) {",
+            "    // BUG: Diagnostic contains: Cannot pass parameter of type",
+            "    A<String> a = sampleMethod(a1, a2);",
+            "  }",
+            "  static void testNegative(A<A<String>> a1, A<String> a2) {",
+            "    A<String> a = sampleMethod(a1, a2);",
+            "  }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void varargsParameter() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "class Test {",
+            "  static class A<T extends @Nullable Object> { }",
+            "  static A<@Nullable String> sampleMethodWithVarArgs(A<String>... args) {",
+            "     return new A<@Nullable String>();",
+            "  }",
+            "  static void testPositive(A<@Nullable String> a1, A<String> a2) {",
+            "     // BUG: Diagnostic contains: Cannot pass parameter of type",
+            "     A<@Nullable String> b = sampleMethodWithVarArgs(a1);",
+            "     // BUG: Diagnostic contains: Cannot pass parameter of type",
+            "     A<@Nullable String> b2 = sampleMethodWithVarArgs(a2, a1);",
+            "  }",
+            "  static void testNegative(A<String> a1, A<String> a2) {",
+            "     A<@Nullable String> b = sampleMethodWithVarArgs(a1);",
+            "     A<@Nullable String> b2 = sampleMethodWithVarArgs(a2, a1);",
+            "  }",
+            "}")
+        .doTest();
+  }
 
   @Test
   public void methodMatch() {
