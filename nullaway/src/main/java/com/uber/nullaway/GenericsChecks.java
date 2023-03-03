@@ -153,10 +153,12 @@ public final class GenericsChecks {
 
   /**
    * This method returns the type of the given tree, including any type use annotations.
+   *
    * <p>This method is required because in some cases, the type returned by {@link
    * com.google.errorprone.util.ASTHelpers#getType(Tree)} fails to preserve type use annotations,
    * particularly when dealing with {@link com.sun.source.tree.NewClassTree} (e.g., {@code new
    * Foo<@Nullable A>}).
+   *
    * @param tree A tree for which we need the type with preserved annotations.
    * @return Type of the tree with preserved annotations.
    */
@@ -364,12 +366,10 @@ public final class GenericsChecks {
             type.getEnclosingType(), com.sun.tools.javac.util.List.from(newTypeArgs), type.tsym);
     return finalType;
   }
+
   // here we are checking if we should report an error on not considering the @Nullable annotations
   // for overriden and
   // overriding method return type should be consistent with the type parameter
-  // TODO: Return Nullness if possible
-  // TODO: Should also work for no-Type variables
-  // TODO: share the similar logic with the parameters
   public boolean shouldReportAnError(
       Symbol.MethodSymbol overriddenMethod,
       Symbol.MethodSymbol overridingMethod,
@@ -378,41 +378,43 @@ public final class GenericsChecks {
     // method return type is of type Type variable
     if (config.isJSpecifyMode()) {
 
-      // type of the type variable in the overridden class (here we will get R now need to check if
-      // the type of R
+      // type of the type variable in the overridden class
       // matches the return type of the method
-      Type.MethodType type =
+      Type.MethodType overriddenMethodType =
           (Type.MethodType)
               state.getTypes().memberType(overridingMethod.owner.type, overriddenMethod);
-      Type returnType = type.getReturnType(); // this is type of the type parameter
+      Type overriddenMethodReturnType =
+          overriddenMethodType.getReturnType(); // this is type of the type parameter
       // return type of the overriding method
       Type overridingMethodReturnType = overridingMethod.getReturnType();
 
-      boolean hasNullableAnnotation1 =
-          Nullness.hasNullableAnnotation(returnType.getAnnotationMirrors().stream(), config);
+      boolean overriddenMethodHasNullableAnnotation =
+          Nullness.hasNullableAnnotation(
+              overriddenMethodReturnType.getAnnotationMirrors().stream(), config);
 
-      boolean hasNullableAnnotation2 =
+      boolean overridingMethodHasNullableAnnotation =
           Nullness.hasNullableAnnotation(
               overridingMethodReturnType.getAnnotationMirrors().stream(), config);
 
-      if (hasNullableAnnotation1 != hasNullableAnnotation2) {
-        return true;
+      if (overriddenMethodHasNullableAnnotation != overridingMethodHasNullableAnnotation) {
+        return false;
       }
 
-      if (returnType instanceof Type.ClassType
+      if (overriddenMethodReturnType instanceof Type.ClassType
           && overridingMethodReturnType instanceof Type.ClassType) {
         boolean doNullabilityAnnotationsMatch =
             compareNullabilityAnnotations(
-                (Type.ClassType) returnType, (Type.ClassType) overridingMethodReturnType);
+                (Type.ClassType) overriddenMethodReturnType,
+                (Type.ClassType) overridingMethodReturnType);
         if (!doNullabilityAnnotationsMatch) {
           // don't report an error here as the return type and the type parameters have the same
           // annotations
-          return true;
+          return false;
         }
       }
     }
 
-    return false;
+    return true;
   }
 
   /**

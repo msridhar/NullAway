@@ -937,13 +937,15 @@ public class NullAway extends BugChecker
       if (overridingMethodReturnNullness.equals(Nullness.NULLABLE)
           && (memberReferenceTree == null
               || getComputedNullness(memberReferenceTree).equals(Nullness.NULLABLE))) {
-        boolean shouldReportAnError = true;
+        boolean returnTypeAnnotationsMatchWithOverriddenMethod = false;
         if (config.isJSpecifyMode()) {
-          shouldReportAnError =
+          returnTypeAnnotationsMatchWithOverriddenMethod =
               new GenericsChecks(state, config, this)
                   .shouldReportAnError(overriddenMethod, overridingMethod, state);
         }
-        if (shouldReportAnError) {
+        // if the return type of the overridden method matches the return type of the overriding
+        // method
+        if (!returnTypeAnnotationsMatchWithOverriddenMethod) {
           String message;
           if (memberReferenceTree != null) {
             message =
