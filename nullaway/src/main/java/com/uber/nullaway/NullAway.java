@@ -536,8 +536,7 @@ public class NullAway extends BugChecker
         || isModuleSymbol(symbol)) {
       return Description.NO_MATCH;
     }
-    // TODO:here, we need to have the type of t as Nullable it is considering it as NonNull
-    // Need to fix this
+
     Description badDeref = matchDereference(tree.getExpression(), tree, state);
     if (!badDeref.equals(Description.NO_MATCH)) {
       return badDeref;
@@ -2355,7 +2354,6 @@ public class NullAway extends BugChecker
         return Description.NO_MATCH;
       }
     }
-    // check for null dereference
     if (mayBeNullExpr(state, baseExpression)) {
       final String message =
           "dereferenced expression " + state.getSourceForNode(baseExpression) + " is @Nullable";
@@ -2364,6 +2362,7 @@ public class NullAway extends BugChecker
       return errorBuilder.createErrorDescriptionForNullAssignment(
           errorMessage, baseExpression, buildDescription(derefExpression), state, null);
     }
+
     Optional<ErrorMessage> handlerErrorMessage =
         handler.onExpressionDereference(derefExpression, baseExpression, state);
     if (handlerErrorMessage.isPresent()) {
