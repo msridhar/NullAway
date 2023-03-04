@@ -607,7 +607,6 @@ public class NullAway extends BugChecker
     }
   }
 
-  @SuppressWarnings({"UnusedVariable"})
   @Override
   public Description matchMethod(MethodTree tree, VisitorState state) {
     checkForMethodNullMarkedness(tree, state);
@@ -902,7 +901,6 @@ public class NullAway extends BugChecker
    * @param state visitor state.
    * @return discovered error, or {@link Description#NO_MATCH} if no error
    */
-  @SuppressWarnings({"UnusedVariable"})
   private Description checkOverriding(
       Symbol.MethodSymbol overriddenMethod,
       Symbol.MethodSymbol overridingMethod,
@@ -937,15 +935,24 @@ public class NullAway extends BugChecker
       if (overridingMethodReturnNullness.equals(Nullness.NULLABLE)
           && (memberReferenceTree == null
               || getComputedNullness(memberReferenceTree).equals(Nullness.NULLABLE))) {
-        boolean returnTypeAnnotationsMatchWithOverriddenMethod = false;
+        Nullness overriddenMethodReturnTypeNullness = Nullness.NULLABLE;
         if (config.isJSpecifyMode()) {
-          returnTypeAnnotationsMatchWithOverriddenMethod =
+          overriddenMethodReturnTypeNullness =
+              GenericsChecks.getOverriddenMethodReturnTypeNullness(
+                  overriddenMethod, overridingMethod.owner.type, state, config);
+        }
+        boolean doNullabilityAnnotationsMatch = false;
+        // if the overridden method return type has the nullable annotation, check for the nested
+        // Param
+        // annotations as well
+        if (config.isJSpecifyMode() && overriddenMethodReturnTypeNullness == Nullness.NULLABLE) {
+          doNullabilityAnnotationsMatch =
               new GenericsChecks(state, config, this)
-                  .DoNullabilityAnnotationsMatch(overriddenMethod, overridingMethod, state);
+                  .DoNullabilityAnnotationsMatch(overriddenMethod, overridingMethod);
         }
         // if the return type of the overridden method matches the return type of the overriding
         // method
-        if (!returnTypeAnnotationsMatchWithOverriddenMethod) {
+        if (!doNullabilityAnnotationsMatch) {
           String message;
           if (memberReferenceTree != null) {
             message =

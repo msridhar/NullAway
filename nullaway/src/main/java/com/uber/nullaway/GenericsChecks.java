@@ -408,13 +408,10 @@ public final class GenericsChecks {
   // for overriden and
   // overriding method return type should be consistent with the type parameter
   public boolean DoNullabilityAnnotationsMatch(
-      Symbol.MethodSymbol overriddenMethod,
-      Symbol.MethodSymbol overridingMethod,
-      VisitorState state) {
+      Symbol.MethodSymbol overriddenMethod, Symbol.MethodSymbol overridingMethod) {
 
     // method return type is of type Type variable
     if (config.isJSpecifyMode()) {
-
       // type of the type variable in the overridden class
       // matches the return type of the method
       Type.MethodType overriddenMethodType =
@@ -424,19 +421,6 @@ public final class GenericsChecks {
           overriddenMethodType.getReturnType(); // this is type of the type parameter
       // return type of the overriding method
       Type overridingMethodReturnType = overridingMethod.getReturnType();
-
-      boolean overriddenMethodHasNullableAnnotation =
-          Nullness.hasNullableAnnotation(
-              overriddenMethodReturnType.getAnnotationMirrors().stream(), config);
-
-      boolean overridingMethodHasNullableAnnotation =
-          Nullness.hasNullableAnnotation(
-              overridingMethodReturnType.getAnnotationMirrors().stream(), config);
-
-      if (overriddenMethodHasNullableAnnotation != overridingMethodHasNullableAnnotation) {
-        return false;
-      }
-
       if (overriddenMethodReturnType instanceof Type.ClassType
           && overridingMethodReturnType instanceof Type.ClassType) {
         boolean doNullabilityAnnotationsMatch =
@@ -454,6 +438,26 @@ public final class GenericsChecks {
     return true;
   }
 
+  public static Nullness getOverriddenMethodReturnTypeNullness(
+      Symbol.MethodSymbol overridingMethod,
+      Type overriddenMethodOwnerType,
+      VisitorState state,
+      Config config) {
+
+    Type overriddenMethodType =
+        state.getTypes().memberType(overriddenMethodOwnerType, overridingMethod);
+    if (!(overriddenMethodType instanceof Type.MethodType)) {
+      return Nullness.NONNULL;
+    }
+    boolean hasNullableAnnotation =
+        Nullness.hasNullableAnnotation(
+            overriddenMethodType.getReturnType().getAnnotationMirrors().stream(), config);
+    if (hasNullableAnnotation) {
+      return Nullness.NULLABLE;
+    } else {
+      return Nullness.NONNULL;
+    }
+  }
   /**
    * if a method has Nullable return type, only then the shouldReportAnError will be called. if the
    * annotation of R is Nullable and the return types match
@@ -462,28 +466,11 @@ public final class GenericsChecks {
    */
   public static Nullness getActualAnnotation(
       MethodInvocationNode node, Config config, VisitorState state) {
-    Type type =
-        state
-            .getTypes()
-            .memberType(
-                (Type) node.getTarget().getReceiver().getType(),
-                ASTHelpers.getSymbol(node.getTarget().getTree()));
-    ;
-    if (!(type instanceof Type.MethodType)) {
-      return Nullness.NONNULL;
-    }
-    // type - com.uber.Test.TestFunc2
-    // need to find the method matching the invoked method
-    boolean hasNullableAnnotation =
-        Nullness.hasNullableAnnotation(
-            type.getReturnType().getAnnotationMirrors().stream(), config);
-    // Nullness.hasNullableAnnotation(type.getAnnotationMirrors().stream(), config);
-
-    if (hasNullableAnnotation) {
-      return Nullness.NULLABLE;
-    } else {
-      return Nullness.NONNULL;
-    }
+    return getOverriddenMethodReturnTypeNullness(
+        (Symbol.MethodSymbol) ASTHelpers.getSymbol(node.getTarget().getTree()),
+        (Type) node.getTarget().getReceiver().getType(),
+        state,
+        config);
   }
   /**
    * For a conditional expression <em>c</em>, check whether the type parameter nullability for each
