@@ -626,7 +626,8 @@ public class NullAway extends BugChecker
           NullabilityUtil.getClosestOverriddenMethod(methodSymbol, state.getTypes());
       if (closestOverriddenMethod != null) {
         new GenericsChecks(state, config, this)
-            .checkTypeParameterNullnessForMethodOverriding(tree, methodSymbol);
+            .checkTypeParameterNullnessForMethodOverriding(
+                tree, methodSymbol, closestOverriddenMethod);
         return checkOverriding(closestOverriddenMethod, methodSymbol, null, state);
       }
     }

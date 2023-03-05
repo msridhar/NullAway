@@ -818,23 +818,39 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             "package com.uber;",
             "import org.jspecify.annotations.Nullable;",
             "class Test {",
-            "  class P<T1 extends @Nullable Object, T2 extends @Nullable Object>{",
-            "  public void display(String s){ System.out.println(s);}",
-            "}",
+            " class P<T1 extends @Nullable Object, T2 extends @Nullable Object>{}",
             " interface Fn<T extends P<R, R>, R extends @Nullable Object> {",
             "  T apply();",
             " }",
             " class TestFunc implements Fn<P<@Nullable String, String>, @Nullable String> {",
             " @Override",
-            "  // BUG: Diagnostic contains: return expression",
+            "  // BUG: Diagnostic contains: Cannot return",
             " public P<@Nullable String, @Nullable String> apply() {",
             "   return new P<@Nullable String, @Nullable String>();",
             "  }",
             " }",
-            " void useTestFunc(String s) {",
-            "  TestFunc f1 = new TestFunc();",
-            "  P<@Nullable String, @Nullable String> t1 = f1.apply();",
-            "  t1.display(s);",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void nestedMethodParamTypeMatch() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "class Test {",
+            "  class P<T1 extends @Nullable Object, T2 extends @Nullable Object>{}",
+            " interface Fn<T extends P<R, R>, R extends @Nullable Object> {",
+            "  String apply(T t, String s);",
+            " }",
+            " class TestFunc implements Fn<P<String, String>, String> {",
+            " @Override",
+            "  // BUG: Diagnostic contains: Cannot have method parameter",
+            "  public String apply(P<@Nullable String, String> p, String s) {",
+            "    return s;",
+            "  }",
             " }",
             "}")
         .doTest();

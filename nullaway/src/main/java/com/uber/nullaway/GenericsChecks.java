@@ -169,10 +169,11 @@ public final class GenericsChecks {
             errorMessage, analysis.buildDescription(tree), state, null));
   }
 
+  // TODO: Update error messages
   private void reportInvalidParametersNullabilityError(
       Type formalParameterType,
       Type actualParameterType,
-      ExpressionTree paramExpression,
+      Tree paramExpression,
       VisitorState state,
       NullAway analysis) {
     ErrorBuilder errorBuilder = analysis.getErrorBuilder();
@@ -188,6 +189,39 @@ public final class GenericsChecks {
         errorBuilder.createErrorDescription(
             errorMessage, analysis.buildDescription(paramExpression), state, null));
   }
+
+  private void reportInvalidOverridingMethodReturnTypeError(
+      Tree methodTree, Type typeParameterType, Type methodReturnType) {
+    ErrorBuilder errorBuilder = analysis.getErrorBuilder();
+    ErrorMessage errorMessage =
+        new ErrorMessage(
+            ErrorMessage.MessageTypes.PASS_NULLABLE_GENERIC,
+            "Cannot return type "
+                + methodReturnType
+                + ", as corresponding type parameter has type "
+                + typeParameterType
+                + ", which has mismatched type parameter nullability");
+    state.reportMatch(
+        errorBuilder.createErrorDescription(
+            errorMessage, analysis.buildDescription(methodTree), state, null));
+  }
+
+  private void reportInvalidOverridingMethodParamTypeError(
+      Tree methodTree, Type typeParameterType, Type methodParamType) {
+    ErrorBuilder errorBuilder = analysis.getErrorBuilder();
+    ErrorMessage errorMessage =
+        new ErrorMessage(
+            ErrorMessage.MessageTypes.PASS_NULLABLE_GENERIC,
+            "Cannot have method parameter type "
+                + methodParamType
+                + ", as corresponding type parameter has type "
+                + typeParameterType
+                + ", which has mismatched type parameter nullability");
+    state.reportMatch(
+        errorBuilder.createErrorDescription(
+            errorMessage, analysis.buildDescription(methodTree), state, null));
+  }
+
   /**
    * This method returns the type of the given tree, including any type use annotations.
    *
@@ -518,15 +552,48 @@ public final class GenericsChecks {
   }
 
   public void checkTypeParameterNullnessForMethodOverriding(
-      MethodTree tree, Symbol.MethodSymbol overridingMethod) {
+      MethodTree tree, Symbol.MethodSymbol overridingMethod, Symbol.MethodSymbol overriddenMethod) {
     if (!config.isJSpecifyMode()) {
       return;
     }
     // TODO: checking for return type need to perform similar checks for method params
-    checkTypeParameterNullnessForOverriddenMethodReturnType(tree, overridingMethod);
+    checkTypeParameterNullnessForOverridingMethodReturnType(tree, overridingMethod);
+    checkTypeParameterNullnessForOverridingMethodParameterType(
+        tree, overridingMethod, overriddenMethod);
   }
 
-  private void checkTypeParameterNullnessForOverriddenMethodReturnType(
+  private void checkTypeParameterNullnessForOverridingMethodParameterType(
+      MethodTree tree, Symbol.MethodSymbol overridingMethod, Symbol.MethodSymbol overriddenMethod) {
+    List<? extends VariableTree> methodParameters = tree.getParameters();
+    Type ownerClassType =
+        state.getTypes().asSuper(overridingMethod.owner.type, overriddenMethod.owner);
+    List<Type> ownerClassTypeArguments = ownerClassType.getTypeArguments();
+    if (ownerClassType == null) {
+      return;
+    }
+    for (int i = 0; i < methodParameters.size(); i++) {
+      Type methodParameterType = getTreeType(methodParameters.get(i));
+      Type typeParameterType = null;
+      for (int j = 0; j < ownerClassTypeArguments.size(); j++) {
+        Type ownerClassTypeArgument = ownerClassTypeArguments.get(j);
+        if (ASTHelpers.isSameType(ownerClassTypeArgument, methodParameterType, state)) {
+          typeParameterType = ownerClassTypeArgument;
+        }
+      }
+      if (typeParameterType instanceof Type.ClassType
+          && methodParameterType instanceof Type.ClassType) {
+        boolean doNullabilityAnnotationsMatch =
+            compareNullabilityAnnotations(
+                (Type.ClassType) typeParameterType, (Type.ClassType) methodParameterType);
+        if (!doNullabilityAnnotationsMatch) {
+          reportInvalidOverridingMethodParamTypeError(
+              methodParameters.get(i), typeParameterType, methodParameterType);
+        }
+      }
+    }
+  }
+
+  private void checkTypeParameterNullnessForOverridingMethodReturnType(
       MethodTree tree, Symbol.MethodSymbol overridingMethod) {
     Type typeParamType =
         state
@@ -544,8 +611,8 @@ public final class GenericsChecks {
             (Type.ClassType) typeParamType, (Type.ClassType) overridingMethod.getReturnType());
 
     if (!doNullabilityAnnotationsMatch) {
-      reportInvalidReturnTypeError(
-          tree, typeParamType, overridingMethod.getReturnType(), state, analysis);
+      reportInvalidOverridingMethodReturnTypeError(
+          tree, typeParamType, overridingMethod.getReturnType());
     }
   }
 }
