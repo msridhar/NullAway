@@ -404,40 +404,6 @@ public final class GenericsChecks {
     return finalType;
   }
 
-  // here we are checking if we should report an error on not considering the @Nullable annotations
-  // for overriden and
-  // overriding method return type should be consistent with the type parameter
-  public boolean DoNullabilityAnnotationsMatch(
-      Symbol.MethodSymbol overriddenMethod, Symbol.MethodSymbol overridingMethod) {
-
-    // method return type is of type Type variable
-    if (config.isJSpecifyMode()) {
-      // type of the type variable in the overridden class
-      // matches the return type of the method
-      Type.MethodType overriddenMethodType =
-          (Type.MethodType)
-              state.getTypes().memberType(overridingMethod.owner.type, overriddenMethod);
-      Type overriddenMethodReturnType =
-          overriddenMethodType.getReturnType(); // this is type of the type parameter
-      // return type of the overriding method
-      Type overridingMethodReturnType = overridingMethod.getReturnType();
-      if (overriddenMethodReturnType instanceof Type.ClassType
-          && overridingMethodReturnType instanceof Type.ClassType) {
-        boolean doNullabilityAnnotationsMatch =
-            compareNullabilityAnnotations(
-                (Type.ClassType) overriddenMethodReturnType,
-                (Type.ClassType) overridingMethodReturnType);
-        if (!doNullabilityAnnotationsMatch) {
-          // don't report an error here as the return type and the type parameters have the same
-          // annotations
-          return false;
-        }
-      }
-    }
-
-    return true;
-  }
-
   public static Nullness getOverriddenMethodReturnTypeNullness(
       Symbol.MethodSymbol overridingMethod,
       Type overriddenMethodOwnerType,
