@@ -556,7 +556,6 @@ public final class GenericsChecks {
     if (!config.isJSpecifyMode()) {
       return;
     }
-    // TODO: checking for return type need to perform similar checks for method params
     checkTypeParameterNullnessForOverridingMethodReturnType(tree, overridingMethod);
     checkTypeParameterNullnessForOverridingMethodParameterType(
         tree, overridingMethod, overriddenMethod);
