@@ -523,6 +523,11 @@ public final class GenericsChecks {
       return;
     }
     // TODO: checking for return type need to perform similar checks for method params
+    checkTypeParameterNullnessForOverriddenMethodReturnType(tree, overridingMethod);
+  }
+
+  private void checkTypeParameterNullnessForOverriddenMethodReturnType(
+      MethodTree tree, Symbol.MethodSymbol overridingMethod) {
     Type typeParamType =
         state
             .getTypes()
