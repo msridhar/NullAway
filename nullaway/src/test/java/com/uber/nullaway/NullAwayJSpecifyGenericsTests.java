@@ -769,14 +769,14 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             "  }",
             " }",
             " static void useTestFunc(String s) {",
-            "    Fn<P<@Nullable String>, @Nullable String> f1 = new TestFunc1();",
-            "    String t1 = f1.apply(s);",
+            "   Fn<P<@Nullable String>, @Nullable String> f1 = new TestFunc1();",
+            "   String t1 = f1.apply(s);",
             "   // BUG: Diagnostic contains: dereferenced expression",
-            "     t1.hashCode();",
-            "    Fn<P<@Nullable String>, @Nullable String> f2 = new TestFunc2();",
-            "    String t2 = f2.apply(s);",
-            "    // BUG: Diagnostic contains: dereferenced expression",
-            "     t2.hashCode();",
+            "   t1.hashCode();",
+            "   Fn<P<@Nullable String>, @Nullable String> f2 = new TestFunc2();",
+            "   String t2 = f2.apply(s);",
+            "   // BUG: Diagnostic contains: dereferenced expression",
+            "   t2.hashCode();",
             " }",
             "}")
         .doTest();
@@ -790,7 +790,7 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             "package com.uber;",
             "import org.jspecify.annotations.Nullable;",
             "class Test {",
-            "  interface Fn<P extends @Nullable Object, R> {",
+            " interface Fn<P extends @Nullable Object, R> {",
             "   @Nullable R apply(P p);",
             "  }",
             " static class TestFunc implements Fn<String, String> {",
@@ -801,10 +801,40 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             "  }",
             " }",
             " static void useTestFunc(String s) {",
-            "    Fn<String, String> f = new TestFunc();",
-            "    String t = f.apply(s);",
-            "    // BUG: Diagnostic contains: dereferenced expression",
-            "     t.hashCode();",
+            "  Fn<String, String> f = new TestFunc();",
+            "  String t = f.apply(s);",
+            "  // BUG: Diagnostic contains: dereferenced expression",
+            "  t.hashCode();",
+            " }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void nestedMethodReturnTypeMatch() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "class Test {",
+            "  class P<T1 extends @Nullable Object, T2 extends @Nullable Object>{",
+            "  public void display(String s){ System.out.println(s);}",
+            "}",
+            " interface Fn<T extends P<R, R>, R extends @Nullable Object> {",
+            "  T apply();",
+            " }",
+            " class TestFunc implements Fn<P<@Nullable String, String>, @Nullable String> {",
+            " @Override",
+            "  // BUG: Diagnostic contains: return expression",
+            " public P<@Nullable String, @Nullable String> apply() {",
+            "   return new P<@Nullable String, @Nullable String>();",
+            "  }",
+            " }",
+            " void useTestFunc(String s) {",
+            "  TestFunc f1 = new TestFunc();",
+            "  P<@Nullable String, @Nullable String> t1 = f1.apply();",
+            "  t1.display(s);",
             " }",
             "}")
         .doTest();

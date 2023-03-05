@@ -12,6 +12,7 @@ import com.sun.source.tree.AnnotationTree;
 import com.sun.source.tree.AssignmentTree;
 import com.sun.source.tree.ConditionalExpressionTree;
 import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.MethodTree;
 import com.sun.source.tree.NewClassTree;
 import com.sun.source.tree.ParameterizedTypeTree;
 import com.sun.source.tree.Tree;
@@ -527,6 +528,33 @@ public final class GenericsChecks {
           }
         }
       }
+    }
+  }
+
+  public void checkTypeParameterNullnessForMethodOverriding(
+      MethodTree tree, Symbol.MethodSymbol overridingMethod) {
+    if (!config.isJSpecifyMode()) {
+      return;
+    }
+    // TODO: checking for return type need to perform similar checks for method params
+    Type typeParamType =
+        state
+            .getTypes()
+            .memberType(overridingMethod.owner.type, overridingMethod.getReturnType().tsym);
+    if (!(typeParamType instanceof Type.ClassType
+        && overridingMethod.getReturnType() instanceof Type.ClassType)) {
+      return;
+    }
+    if (!(overridingMethod.getReturnType() instanceof Type.ClassType)) {
+      return;
+    }
+    boolean doNullabilityAnnotationsMatch =
+        compareNullabilityAnnotations(
+            (Type.ClassType) typeParamType, (Type.ClassType) overridingMethod.getReturnType());
+
+    if (!doNullabilityAnnotationsMatch) {
+      reportInvalidReturnTypeError(
+          tree, typeParamType, overridingMethod.getReturnType(), state, analysis);
     }
   }
 }
