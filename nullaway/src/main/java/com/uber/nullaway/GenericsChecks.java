@@ -28,7 +28,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
-import org.checkerframework.nullaway.dataflow.cfg.node.MethodInvocationNode;
 
 /** Methods for performing checks related to generic types and nullability. */
 public final class GenericsChecks {
@@ -425,20 +424,7 @@ public final class GenericsChecks {
       return Nullness.NONNULL;
     }
   }
-  /**
-   * if a method has Nullable return type, only then the shouldReportAnError will be called. if the
-   * annotation of R is Nullable and the return types match
-   * node.getTarget().getReceiver().getBlock().getNodes().get(0).rhs.type.tsym member type (type of
-   * f1, sym for apply)
-   */
-  public static Nullness getActualAnnotation(
-      MethodInvocationNode node, Config config, VisitorState state) {
-    return getOverriddenMethodReturnTypeNullness(
-        (Symbol.MethodSymbol) ASTHelpers.getSymbol(node.getTarget().getTree()),
-        (Type) node.getTarget().getReceiver().getType(),
-        state,
-        config);
-  }
+
   /**
    * For a conditional expression <em>c</em>, check whether the type parameter nullability for each
    * sub-expression of <em>c</em> matches the type parameter nullability of <em>c</em> itself.

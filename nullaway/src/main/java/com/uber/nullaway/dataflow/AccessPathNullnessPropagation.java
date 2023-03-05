@@ -1015,7 +1015,12 @@ public class AccessPathNullnessPropagation
       // check only when in JSpecify mode and the method is an interface method
       if (node != null && config.isJSpecifyMode()) {
         if (node.getTarget() != null && node.getTarget().getMethod() != null) {
-          nullness = GenericsChecks.getActualAnnotation(node, config, state);
+          nullness =
+              GenericsChecks.getOverriddenMethodReturnTypeNullness(
+                  (Symbol.MethodSymbol) ASTHelpers.getSymbol(node.getTarget().getTree()),
+                  (Type) node.getTarget().getReceiver().getType(),
+                  state,
+                  config);
         }
       }
     } else {
