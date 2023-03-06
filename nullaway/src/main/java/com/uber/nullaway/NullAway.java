@@ -1680,7 +1680,6 @@ public class NullAway extends BugChecker
                 errorMessage, actual, buildDescription(actual), state, formalParams.get(argPos)));
       }
     }
-
     // Check for @NonNull being passed to castToNonNull (if configured)
     return checkCastToNonNullTakesNullable(tree, state, methodSymbol, actualParams);
   }
