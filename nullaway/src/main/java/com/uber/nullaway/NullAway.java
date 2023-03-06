@@ -973,6 +973,8 @@ public class NullAway extends BugChecker
             overriddenMethod);
       }
     }
+    // if any parameter in the super method is annotated @Nullable,
+    // overriding method cannot assume @Nonnull
     return checkParamOverriding(
         overridingMethod.getParameters(), overriddenMethod, null, memberReferenceTree, state);
   }
