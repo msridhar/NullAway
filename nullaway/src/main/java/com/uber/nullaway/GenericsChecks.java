@@ -439,13 +439,13 @@ public final class GenericsChecks {
   }
 
   public static Nullness getOverriddenMethodReturnTypeNullness(
-      Symbol.MethodSymbol overridingMethod,
-      Type overriddenMethodOwnerType,
+      Symbol.MethodSymbol overriddenMethod,
+      Type overridingMethodOwnerType,
       VisitorState state,
       Config config) {
 
     Type overriddenMethodType =
-        state.getTypes().memberType(overriddenMethodOwnerType, overridingMethod);
+        state.getTypes().memberType(overridingMethodOwnerType, overriddenMethod);
     if (!(overriddenMethodType instanceof Type.MethodType)) {
       return Nullness.NONNULL;
     }
