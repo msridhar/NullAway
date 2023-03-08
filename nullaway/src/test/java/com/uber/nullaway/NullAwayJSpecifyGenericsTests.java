@@ -704,7 +704,7 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
   }
 
   @Test
-  public void methodMatch() {
+  public void overrideReturnTypes() {
     makeHelper()
         .addSourceLines(
             "Test.java",
@@ -723,6 +723,13 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             " static class TestFunc2 implements Fn<String, @Nullable String> {",
             "  @Override",
             "  public String apply(String s) {",
+            "   return s;",
+            "  }",
+            " }",
+            " static class TestFunc3 implements Fn<String, String> {",
+            "  @Override",
+            "  // BUG: Diagnostic contains: method returns @Nullable, but superclass",
+            "  public @Nullable String apply(String s) {",
             "   return s;",
             "  }",
             " }",
@@ -768,6 +775,39 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             "      // no error here due to null check",
             "      t1.hashCode();",
             "    }",
+            " }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void overrideParameterType() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "class Test {",
+            "  interface Fn<P extends @Nullable Object, R extends @Nullable Object> {",
+            "   R apply(P p);",
+            "  }",
+            " static class TestFunc1 implements Fn<@Nullable String, String> {",
+            "  @Override",
+            "  // BUG: Diagnostic contains: parameter s",
+            "  public String apply(String s) {",
+            "   return s;",
+            "  }",
+            " }",
+            " static class TestFunc2 implements Fn<@Nullable String, String> {",
+            "  @Override",
+            "  public String apply(@Nullable String s) {",
+            "   return \"hi\";",
+            "  }",
+            " }",
+            " static void useTestFunc(String s) {",
+            "    Fn<@Nullable String, String> f1 = new TestFunc2();",
+            "    // should get no error here",
+            "    f1.apply(null);",
             " }",
             "}")
         .doTest();
