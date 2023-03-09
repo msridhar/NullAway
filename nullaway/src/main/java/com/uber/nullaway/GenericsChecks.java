@@ -566,19 +566,15 @@ public final class GenericsChecks {
     List<? extends VariableTree> methodParameters = tree.getParameters();
     Type ownerClassType =
         state.getTypes().asSuper(overridingMethod.owner.type, overriddenMethod.owner);
-    List<Type> ownerClassTypeArguments = ownerClassType.getTypeArguments();
     if (ownerClassType == null) {
       return;
     }
     for (int i = 0; i < methodParameters.size(); i++) {
       Type methodParameterType = getTreeType(methodParameters.get(i));
-      Type typeParameterType = null;
-      for (int j = 0; j < ownerClassTypeArguments.size(); j++) {
-        Type ownerClassTypeArgument = ownerClassTypeArguments.get(j);
-        if (ASTHelpers.isSameType(ownerClassTypeArgument, methodParameterType, state)) {
-          typeParameterType = ownerClassTypeArgument;
-        }
-      }
+      Type typeParameterType =
+          state
+              .getTypes()
+              .memberType(ownerClassType, ASTHelpers.getSymbol(methodParameters.get(i)));
       if (typeParameterType instanceof Type.ClassType
           && methodParameterType instanceof Type.ClassType) {
         boolean doNullabilityAnnotationsMatch =
@@ -613,5 +609,31 @@ public final class GenericsChecks {
       reportInvalidOverridingMethodReturnTypeError(
           tree, typeParamType, overridingMethod.getReturnType());
     }
+  }
+
+  public boolean hasMismatchedNullabilityOfArguments(
+      Symbol.MethodSymbol methodSymbol, List<? extends ExpressionTree> actualParams) {
+    for (int i = 0; i < actualParams.size(); i++) {
+      Type actualParamType = getTreeType(actualParams.get(i));
+      boolean actualParamHasNullableAnnotation =
+          Nullness.hasNullableAnnotation(actualParamType.getAnnotationMirrors().stream(), config);
+      // if actual param does not have nullable annotation then don't check further
+      if (!actualParamHasNullableAnnotation) {
+        continue;
+      }
+      Type formalParamType =
+          state
+              .getTypes()
+              .memberType(methodSymbol.owner.type, ASTHelpers.getSymbol(actualParams.get(i)));
+      if (formalParamType == null) {
+        continue;
+      }
+      boolean formalParamHasNullableAnnotation =
+          Nullness.hasNullableAnnotation(formalParamType.getAnnotationMirrors().stream(), config);
+      if (!formalParamHasNullableAnnotation) {
+        return true;
+      }
+    }
+    return false;
   }
 }
