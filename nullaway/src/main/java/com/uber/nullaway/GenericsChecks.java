@@ -564,6 +564,7 @@ public final class GenericsChecks {
   private void checkTypeParameterNullnessForOverridingMethodParameterType(
       MethodTree tree, Symbol.MethodSymbol overridingMethod, Symbol.MethodSymbol overriddenMethod) {
     List<? extends VariableTree> methodParameters = tree.getParameters();
+    List<Symbol.VarSymbol> overriddenMethodParams = overriddenMethod.getParameters();
     Type ownerClassType =
         state.getTypes().asSuper(overridingMethod.owner.type, overriddenMethod.owner);
     if (ownerClassType == null) {
@@ -571,15 +572,32 @@ public final class GenericsChecks {
     }
     for (int i = 0; i < methodParameters.size(); i++) {
       Type methodParameterType = getTreeType(methodParameters.get(i));
+      // p
+      Type typeParameterTypeOverriddenMethod =
+          state.getTypes().memberType(ownerClassType, overriddenMethodParams.get(i));
+      if (typeParameterTypeOverriddenMethod == null) {
+        continue;
+      }
+      // type of type param corresponding to P
       Type typeParameterType =
-          state
-              .getTypes()
-              .memberType(ownerClassType, ASTHelpers.getSymbol(methodParameters.get(i)));
+          state.getTypes().memberType(ownerClassType, typeParameterTypeOverriddenMethod.tsym);
+
       if (typeParameterType instanceof Type.ClassType
           && methodParameterType instanceof Type.ClassType) {
+
         boolean doNullabilityAnnotationsMatch =
             compareNullabilityAnnotations(
                 (Type.ClassType) typeParameterType, (Type.ClassType) methodParameterType);
+        boolean hasNullableAnnotationTypeParamType =
+            Nullness.hasNullableAnnotation(
+                typeParameterType.getAnnotationMirrors().stream(), config);
+        boolean hasNullableAnnotationMethodParameterType =
+            Nullness.hasNullableAnnotation(
+                methodParameterType.getAnnotationMirrors().stream(), config);
+        if (hasNullableAnnotationTypeParamType != hasNullableAnnotationMethodParameterType) {
+          reportInvalidOverridingMethodParamTypeError(
+              methodParameters.get(i), typeParameterType, methodParameterType);
+        }
         if (!doNullabilityAnnotationsMatch) {
           reportInvalidOverridingMethodParamTypeError(
               methodParameters.get(i), typeParameterType, methodParameterType);

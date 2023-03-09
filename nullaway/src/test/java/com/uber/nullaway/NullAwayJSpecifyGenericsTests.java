@@ -793,7 +793,7 @@ public class NullAwayJSpecifyGenericsTests extends NullAwayTestsBase {
             "  }",
             " static class TestFunc1 implements Fn<@Nullable String, String> {",
             "  @Override",
-            "  // BUG: Diagnostic contains: parameter s",
+            "  // BUG: Diagnostic contains: Cannot have method parameter type",
             "  public String apply(String s) {",
             "   return s;",
             "  }",

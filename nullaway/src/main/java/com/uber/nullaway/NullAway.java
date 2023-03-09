@@ -625,9 +625,11 @@ public class NullAway extends BugChecker
       Symbol.MethodSymbol closestOverriddenMethod =
           NullabilityUtil.getClosestOverriddenMethod(methodSymbol, state.getTypes());
       if (closestOverriddenMethod != null) {
-        new GenericsChecks(state, config, this)
-            .checkTypeParameterNullnessForMethodOverriding(
-                tree, methodSymbol, closestOverriddenMethod);
+        if (config.isJSpecifyMode()) {
+          new GenericsChecks(state, config, this)
+              .checkTypeParameterNullnessForMethodOverriding(
+                  tree, methodSymbol, closestOverriddenMethod);
+        }
         return checkOverriding(closestOverriddenMethod, methodSymbol, null, state);
       }
     }
@@ -1669,9 +1671,11 @@ public class NullAway extends BugChecker
       // This statement should be unreachable without assigning actual beforehand:
       Preconditions.checkNotNull(actual);
       // make sure we are passing a non-null value
-      mayActualBeNull =
-          new GenericsChecks(state, config, this)
-              .hasMismatchedNullabilityOfArguments(methodSymbol, actualParams);
+      if (config.isJSpecifyMode()) {
+        mayActualBeNull =
+            new GenericsChecks(state, config, this)
+                .hasMismatchedNullabilityOfArguments(methodSymbol, actualParams);
+      }
       if (mayActualBeNull) {
         String message =
             "passing @Nullable parameter '"
