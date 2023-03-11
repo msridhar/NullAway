@@ -632,9 +632,11 @@ public final class GenericsChecks {
     }
   }
 
-  public Nullness getMethodParamNullness(VarSymbol param, Symbol.MethodSymbol methodSymbol) {
-    Type formalParamType =
-        state.getTypes().memberType(methodSymbol.owner.type, param).getUpperBound();
+  public Nullness getMethodParamNullness(VarSymbol param) {
+    // TODO: remove this comment after review
+    // We have the formal param type P here, P does not have @Nullable annotation but it extends
+    // @Nullable Object
+    Type formalParamType = param.type.getUpperBound();
     if (!(formalParamType instanceof Type.ClassType)) {
       return Nullness.NONNULL;
     }
