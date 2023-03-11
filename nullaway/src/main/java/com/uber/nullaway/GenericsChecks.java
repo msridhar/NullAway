@@ -19,6 +19,7 @@ import com.sun.source.tree.Tree;
 import com.sun.source.tree.VariableTree;
 import com.sun.tools.javac.code.Attribute;
 import com.sun.tools.javac.code.Symbol;
+import com.sun.tools.javac.code.Symbol.VarSymbol;
 import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.TypeMetadata;
 import com.sun.tools.javac.code.Types;
@@ -629,29 +630,17 @@ public final class GenericsChecks {
     }
   }
 
-  public boolean hasMismatchedNullabilityOfArguments(
-      Symbol.MethodSymbol methodSymbol, List<? extends ExpressionTree> actualParams) {
-    for (int i = 0; i < actualParams.size(); i++) {
-      Type actualParamType = getTreeType(actualParams.get(i));
-      boolean actualParamHasNullableAnnotation =
-          Nullness.hasNullableAnnotation(actualParamType.getAnnotationMirrors().stream(), config);
-      // if actual param does not have nullable annotation then don't check further
-      if (!actualParamHasNullableAnnotation) {
-        continue;
-      }
-      Type formalParamType =
-          state
-              .getTypes()
-              .memberType(methodSymbol.owner.type, ASTHelpers.getSymbol(actualParams.get(i)));
-      if (formalParamType == null) {
-        continue;
-      }
-      boolean formalParamHasNullableAnnotation =
-          Nullness.hasNullableAnnotation(formalParamType.getAnnotationMirrors().stream(), config);
-      if (!formalParamHasNullableAnnotation) {
-        return true;
-      }
+  public Nullness getMethodParamNullness(VarSymbol param, Symbol.MethodSymbol methodSymbol) {
+    Type formalParamType = param.type.getUpperBound();
+    if (!(formalParamType instanceof Type.ClassType)) {
+      return Nullness.NONNULL;
     }
-    return false;
+    boolean hasNullableAnnotation =
+        Nullness.hasNullableAnnotation(formalParamType.getAnnotationMirrors().stream(), config);
+    if (hasNullableAnnotation) {
+      return Nullness.NULLABLE;
+    } else {
+      return Nullness.NONNULL;
+    }
   }
 }

@@ -1631,6 +1631,10 @@ public class NullAway extends BugChecker
               Nullness.paramHasNullableAnnotation(methodSymbol, i, config)
                   ? Nullness.NULLABLE
                   : Nullness.NONNULL;
+          if (config.isJSpecifyMode()) {
+            argumentPositionNullness[i] =
+                new GenericsChecks(state, config, this).getMethodParamNullness(param, methodSymbol);
+          }
         }
       }
       new GenericsChecks(state, config, this)
@@ -1671,11 +1675,6 @@ public class NullAway extends BugChecker
       // This statement should be unreachable without assigning actual beforehand:
       Preconditions.checkNotNull(actual);
       // make sure we are passing a non-null value
-      if (config.isJSpecifyMode()) {
-        mayActualBeNull =
-            new GenericsChecks(state, config, this)
-                .hasMismatchedNullabilityOfArguments(methodSymbol, actualParams);
-      }
       if (mayActualBeNull) {
         String message =
             "passing @Nullable parameter '"
