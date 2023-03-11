@@ -633,7 +633,8 @@ public final class GenericsChecks {
   }
 
   public Nullness getMethodParamNullness(VarSymbol param, Symbol.MethodSymbol methodSymbol) {
-    Type formalParamType = param.type.getUpperBound();
+    Type formalParamType =
+        state.getTypes().memberType(methodSymbol.owner.type, param).getUpperBound();
     if (!(formalParamType instanceof Type.ClassType)) {
       return Nullness.NONNULL;
     }
