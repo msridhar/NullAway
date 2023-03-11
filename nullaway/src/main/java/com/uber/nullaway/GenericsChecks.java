@@ -564,33 +564,35 @@ public final class GenericsChecks {
         tree, overridingMethod, overriddenMethod);
   }
 
+  public Nullness getMethodParamNullness(VarSymbol param) {
+    // TODO: remove this comment after review
+    // We have the formal param type P here, P does not have @Nullable annotation but it extends
+    // @Nullable Object
+    Type formalParamType = param.type.getUpperBound();
+    if (!(formalParamType instanceof Type.ClassType)) {
+      return Nullness.NONNULL;
+    }
+    boolean hasNullableAnnotation =
+        Nullness.hasNullableAnnotation(formalParamType.getAnnotationMirrors().stream(), config);
+    if (hasNullableAnnotation) {
+      return Nullness.NULLABLE;
+    } else {
+      return Nullness.NONNULL;
+    }
+  }
+
   private void checkTypeParameterNullnessForOverridingMethodParameterType(
       MethodTree tree, Symbol.MethodSymbol overridingMethod, Symbol.MethodSymbol overriddenMethod) {
     List<? extends VariableTree> methodParameters = tree.getParameters();
     List<Symbol.VarSymbol> overriddenMethodParams = overriddenMethod.getParameters();
-    Type ownerClassType =
-        state.getTypes().asSuper(overridingMethod.owner.type, overriddenMethod.owner);
-    if (ownerClassType == null) {
-      return;
-    }
     for (int i = 0; i < methodParameters.size(); i++) {
-      Type methodParameterType = getTreeType(methodParameters.get(i));
-      // p
-      Type typeParameterTypeOverriddenMethod =
-          state.getTypes().memberType(ownerClassType, overriddenMethodParams.get(i));
-      if (typeParameterTypeOverriddenMethod == null) {
-        continue;
-      }
-      // type of type param corresponding to P
+      Type methodParameterType = ASTHelpers.getType(methodParameters.get(i));
       Type typeParameterType =
-          state.getTypes().memberType(ownerClassType, typeParameterTypeOverriddenMethod.tsym);
-
+          state
+              .getTypes()
+              .memberType(overridingMethod.owner.type, overriddenMethodParams.get(i).type.tsym);
       if (typeParameterType instanceof Type.ClassType
           && methodParameterType instanceof Type.ClassType) {
-
-        boolean doNullabilityAnnotationsMatch =
-            compareNullabilityAnnotations(
-                (Type.ClassType) typeParameterType, (Type.ClassType) methodParameterType);
         boolean hasNullableAnnotationTypeParamType =
             Nullness.hasNullableAnnotation(
                 typeParameterType.getAnnotationMirrors().stream(), config);
@@ -601,7 +603,12 @@ public final class GenericsChecks {
           reportInvalidOverridingMethodParamTypeError(
               methodParameters.get(i), typeParameterType, methodParameterType);
         }
-        if (!doNullabilityAnnotationsMatch) {
+        // for generic types check if the nullability annotations of the type params match
+        boolean doTypeParamNullabilityAnnotationsMatch =
+            compareNullabilityAnnotations(
+                (Type.ClassType) typeParameterType, (Type.ClassType) methodParameterType);
+
+        if (!doTypeParamNullabilityAnnotationsMatch) {
           reportInvalidOverridingMethodParamTypeError(
               methodParameters.get(i), typeParameterType, methodParameterType);
         }
@@ -629,23 +636,6 @@ public final class GenericsChecks {
     if (!doNullabilityAnnotationsMatch) {
       reportInvalidOverridingMethodReturnTypeError(
           tree, typeParamType, overridingMethod.getReturnType());
-    }
-  }
-
-  public Nullness getMethodParamNullness(VarSymbol param) {
-    // TODO: remove this comment after review
-    // We have the formal param type P here, P does not have @Nullable annotation but it extends
-    // @Nullable Object
-    Type formalParamType = param.type.getUpperBound();
-    if (!(formalParamType instanceof Type.ClassType)) {
-      return Nullness.NONNULL;
-    }
-    boolean hasNullableAnnotation =
-        Nullness.hasNullableAnnotation(formalParamType.getAnnotationMirrors().stream(), config);
-    if (hasNullableAnnotation) {
-      return Nullness.NULLABLE;
-    } else {
-      return Nullness.NONNULL;
     }
   }
 }
