@@ -584,13 +584,12 @@ public final class GenericsChecks {
   private void checkTypeParameterNullnessForOverridingMethodParameterType(
       MethodTree tree, Symbol.MethodSymbol overridingMethod, Symbol.MethodSymbol overriddenMethod) {
     List<? extends VariableTree> methodParameters = tree.getParameters();
-    List<Symbol.VarSymbol> overriddenMethodParams = overriddenMethod.getParameters();
+    Type methodWithTypeParams =
+        state.getTypes().memberType(overridingMethod.owner.type, overriddenMethod);
+    List<Type> typeParameterTypes = methodWithTypeParams.getParameterTypes();
     for (int i = 0; i < methodParameters.size(); i++) {
       Type methodParameterType = ASTHelpers.getType(methodParameters.get(i));
-      Type typeParameterType =
-          state
-              .getTypes()
-              .memberType(overridingMethod.owner.type, overriddenMethodParams.get(i).type.tsym);
+      Type typeParameterType = typeParameterTypes.get(i);
       if (typeParameterType instanceof Type.ClassType
           && methodParameterType instanceof Type.ClassType) {
         boolean hasNullableAnnotationTypeParamType =
