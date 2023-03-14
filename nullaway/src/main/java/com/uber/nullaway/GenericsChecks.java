@@ -19,10 +19,10 @@ import com.sun.source.tree.Tree;
 import com.sun.source.tree.VariableTree;
 import com.sun.tools.javac.code.Attribute;
 import com.sun.tools.javac.code.Symbol;
-import com.sun.tools.javac.code.Symbol.VarSymbol;
 import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.TypeMetadata;
 import com.sun.tools.javac.code.Types;
+import com.sun.tools.javac.tree.JCTree;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -564,14 +564,18 @@ public final class GenericsChecks {
         tree, overridingMethod, overriddenMethod);
   }
 
-  public Nullness getMethodParamNullness(VarSymbol param) {
-    // TODO: remove this comment after review
-    // We have the formal param type P here, P does not have @Nullable annotation but it extends
-    // @Nullable Object
-    Type formalParamType = param.type.getUpperBound();
-    if (!(formalParamType instanceof Type.ClassType)) {
+  public Nullness getMethodParamNullness(
+      int paramIndex, Symbol.MethodSymbol methodSymbol, Tree tree) {
+    if (tree instanceof JCTree.JCMethodInvocation == false) {
       return Nullness.NONNULL;
     }
+    JCTree.JCMethodInvocation methodInvocationTree = (JCTree.JCMethodInvocation) tree;
+    if (methodInvocationTree.meth instanceof JCTree.JCFieldAccess == false) {
+      return Nullness.NONNULL;
+    }
+    Type methodReceiverType = ((JCTree.JCFieldAccess) methodInvocationTree.meth).selected.type;
+    Type methodType = state.getTypes().memberType(methodReceiverType, methodSymbol);
+    Type formalParamType = methodType.getParameterTypes().get(paramIndex);
     boolean hasNullableAnnotation =
         Nullness.hasNullableAnnotation(formalParamType.getAnnotationMirrors().stream(), config);
     if (hasNullableAnnotation) {
