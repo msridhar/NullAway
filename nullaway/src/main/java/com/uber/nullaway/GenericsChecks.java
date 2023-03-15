@@ -585,6 +585,21 @@ public final class GenericsChecks {
     }
   }
 
+  public Nullness getOverriddenMethodArgNullness(
+      int parameterIndex,
+      Symbol.MethodSymbol overriddenMethod,
+      Symbol.VarSymbol overridingMethodParam) {
+    Type methodType =
+        state.getTypes().memberType(overridingMethodParam.owner.owner.type, overriddenMethod);
+    Type paramType = methodType.getParameterTypes().get(parameterIndex);
+    boolean hasNullableAnnotation =
+        Nullness.hasNullableAnnotation(paramType.getAnnotationMirrors().stream(), config);
+    if (hasNullableAnnotation) {
+      return Nullness.NULLABLE;
+    }
+    return Nullness.NONNULL;
+  }
+
   private void checkTypeParameterNullnessForOverridingMethodParameterType(
       MethodTree tree, Symbol.MethodSymbol overridingMethod, Symbol.MethodSymbol overriddenMethod) {
     List<? extends VariableTree> methodParameters = tree.getParameters();
@@ -596,16 +611,6 @@ public final class GenericsChecks {
       Type typeParameterType = typeParameterTypes.get(i);
       if (typeParameterType instanceof Type.ClassType
           && methodParameterType instanceof Type.ClassType) {
-        boolean hasNullableAnnotationTypeParamType =
-            Nullness.hasNullableAnnotation(
-                typeParameterType.getAnnotationMirrors().stream(), config);
-        boolean hasNullableAnnotationMethodParameterType =
-            Nullness.hasNullableAnnotation(
-                methodParameterType.getAnnotationMirrors().stream(), config);
-        if (hasNullableAnnotationTypeParamType != hasNullableAnnotationMethodParameterType) {
-          reportInvalidOverridingMethodParamTypeError(
-              methodParameters.get(i), typeParameterType, methodParameterType);
-        }
         // for generic types check if the nullability annotations of the type params match
         boolean doTypeParamNullabilityAnnotationsMatch =
             compareNullabilityAnnotations(
