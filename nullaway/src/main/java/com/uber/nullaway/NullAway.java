@@ -1636,12 +1636,10 @@ public class NullAway extends BugChecker
           argumentPositionNullness[i] =
               Nullness.paramHasNullableAnnotation(methodSymbol, i, config)
                   ? Nullness.NULLABLE
-                  : Nullness.NONNULL;
-          if (config.isJSpecifyMode()) {
-            argumentPositionNullness[i] =
-                new GenericsChecks(state, config, this)
-                    .getMethodParamNullness(i, methodSymbol, tree);
-          }
+                  : (config.isJSpecifyMode()
+                      ? new GenericsChecks(state, config, this)
+                          .getMethodParamNullness(i, methodSymbol, tree)
+                      : Nullness.NONNULL);
         }
       }
       new GenericsChecks(state, config, this)
