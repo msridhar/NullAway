@@ -727,13 +727,11 @@ public class NullAway extends BugChecker
         overriddenMethodArgNullnessMap[i] =
             Nullness.paramHasNullableAnnotation(overriddenMethod, i, config)
                 ? Nullness.NULLABLE
-                : Nullness.NONNULL;
-        if (config.isJSpecifyMode()) {
-          overriddenMethodArgNullnessMap[i] =
-              new GenericsChecks(state, config, this)
-                  .getOverriddenMethodArgNullness(
-                      i, overriddenMethod, overridingParamSymbols.get(i));
-        }
+                : (config.isJSpecifyMode()
+                    ? new GenericsChecks(state, config, this)
+                        .getOverriddenMethodArgNullness(
+                            i, overriddenMethod, overridingParamSymbols.get(i))
+                    : Nullness.NONNULL);
       }
     }
 
