@@ -629,6 +629,11 @@ public final class GenericsChecks {
     }
   }
 
+  /**
+   * @param type A type for which we need the Nullness.
+   * @param config the analysis config
+   * @return returns the Nullness of the type based on the Nullability annotation.
+   */
   private static Nullness getTypeNullness(Type type, Config config) {
     boolean hasNullableAnnotation =
         Nullness.hasNullableAnnotation(type.getAnnotationMirrors().stream(), config);
