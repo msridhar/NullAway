@@ -616,9 +616,6 @@ public final class GenericsChecks {
         && overridingMethod.getReturnType() instanceof Type.ClassType)) {
       return;
     }
-    if (!(overridingMethod.getReturnType() instanceof Type.ClassType)) {
-      return;
-    }
     boolean doNullabilityAnnotationsMatch =
         compareNullabilityAnnotations(
             (Type.ClassType) typeParamType, (Type.ClassType) overridingMethod.getReturnType());
