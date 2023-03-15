@@ -450,14 +450,7 @@ public final class GenericsChecks {
     if (!(overriddenMethodType instanceof Type.MethodType)) {
       return Nullness.NONNULL;
     }
-    boolean hasNullableAnnotation =
-        Nullness.hasNullableAnnotation(
-            overriddenMethodType.getReturnType().getAnnotationMirrors().stream(), config);
-    if (hasNullableAnnotation) {
-      return Nullness.NULLABLE;
-    } else {
-      return Nullness.NONNULL;
-    }
+    return getTypeNullness(overriddenMethodType.getReturnType(), config);
   }
 
   /**
@@ -576,13 +569,7 @@ public final class GenericsChecks {
     Type methodReceiverType = ((JCTree.JCFieldAccess) methodInvocationTree.meth).selected.type;
     Type methodType = state.getTypes().memberType(methodReceiverType, methodSymbol);
     Type formalParamType = methodType.getParameterTypes().get(paramIndex);
-    boolean hasNullableAnnotation =
-        Nullness.hasNullableAnnotation(formalParamType.getAnnotationMirrors().stream(), config);
-    if (hasNullableAnnotation) {
-      return Nullness.NULLABLE;
-    } else {
-      return Nullness.NONNULL;
-    }
+    return getTypeNullness(formalParamType, config);
   }
 
   public Nullness getOverriddenMethodArgNullness(
@@ -592,12 +579,7 @@ public final class GenericsChecks {
     Type methodType =
         state.getTypes().memberType(overridingMethodParam.owner.owner.type, overriddenMethod);
     Type paramType = methodType.getParameterTypes().get(parameterIndex);
-    boolean hasNullableAnnotation =
-        Nullness.hasNullableAnnotation(paramType.getAnnotationMirrors().stream(), config);
-    if (hasNullableAnnotation) {
-      return Nullness.NULLABLE;
-    }
-    return Nullness.NONNULL;
+    return getTypeNullness(paramType, config);
   }
 
   private void checkTypeParameterNullnessForOverridingMethodParameterType(
@@ -645,5 +627,14 @@ public final class GenericsChecks {
       reportInvalidOverridingMethodReturnTypeError(
           tree, typeParamType, overridingMethod.getReturnType());
     }
+  }
+
+  private static Nullness getTypeNullness(Type type, Config config) {
+    boolean hasNullableAnnotation =
+        Nullness.hasNullableAnnotation(type.getAnnotationMirrors().stream(), config);
+    if (hasNullableAnnotation) {
+      return Nullness.NULLABLE;
+    }
+    return Nullness.NONNULL;
   }
 }
