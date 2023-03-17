@@ -563,7 +563,7 @@ public final class GenericsChecks {
     checkTypeParameterNullnessForOverridingMethodParameterType(tree, methodWithTypeParams);
   }
 
-  public Nullness getMethodParamNullness(
+  public Nullness getOverridingMethodParamNullness(
       int paramIndex, Symbol.MethodSymbol methodSymbol, Tree tree) {
     if (!(tree instanceof JCTree.JCMethodInvocation)) {
       return Nullness.NONNULL;
