@@ -565,10 +565,10 @@ public final class GenericsChecks {
 
   public Nullness getOverridingMethodParamNullness(
       int paramIndex, Symbol.MethodSymbol methodSymbol, Tree tree) {
-    if (!(tree instanceof JCTree.JCMethodInvocation)) {
-      return Nullness.NONNULL;
-    }
     JCTree.JCMethodInvocation methodInvocationTree = (JCTree.JCMethodInvocation) tree;
+    // if methodInvocationTree.meth is of type JCTree.JCIdent return Nullness.NONNULL
+    // if not in JSpecify mode then also the Nullness is set to Nullness.NONULL, so it won't affect
+    // the logic
     if (!(methodInvocationTree.meth instanceof JCTree.JCFieldAccess)) {
       return Nullness.NONNULL;
     }
