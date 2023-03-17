@@ -263,6 +263,7 @@ public final class GenericsChecks {
     if (!config.isJSpecifyMode()) {
       return;
     }
+
     Tree lhsTree;
     Tree rhsTree;
     if (tree instanceof VariableTree) {
