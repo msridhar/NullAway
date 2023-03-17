@@ -559,8 +559,7 @@ public final class GenericsChecks {
     }
     Type methodWithTypeParams =
         state.getTypes().memberType(overridingMethod.owner.type, overriddenMethod);
-    checkTypeParameterNullnessForOverridingMethodReturnType(
-        tree, overridingMethod, methodWithTypeParams);
+    checkTypeParameterNullnessForOverridingMethodReturnType(tree, methodWithTypeParams);
     checkTypeParameterNullnessForOverridingMethodParameterType(tree, methodWithTypeParams);
   }
 
@@ -612,19 +611,18 @@ public final class GenericsChecks {
   }
 
   private void checkTypeParameterNullnessForOverridingMethodReturnType(
-      MethodTree tree, Symbol.MethodSymbol overridingMethod, Type methodWithTypeParams) {
+      MethodTree tree, Type methodWithTypeParams) {
     Type typeParamType = methodWithTypeParams.getReturnType();
-    if (!(typeParamType instanceof Type.ClassType
-        && overridingMethod.getReturnType() instanceof Type.ClassType)) {
+    Type methodReturnType = ASTHelpers.getType(tree.getReturnType());
+    if (!(typeParamType instanceof Type.ClassType && methodReturnType instanceof Type.ClassType)) {
       return;
     }
     boolean doNullabilityAnnotationsMatch =
         compareNullabilityAnnotations(
-            (Type.ClassType) typeParamType, (Type.ClassType) overridingMethod.getReturnType());
+            (Type.ClassType) typeParamType, (Type.ClassType) methodReturnType);
 
     if (!doNullabilityAnnotationsMatch) {
-      reportInvalidOverridingMethodReturnTypeError(
-          tree, typeParamType, overridingMethod.getReturnType());
+      reportInvalidOverridingMethodReturnTypeError(tree, typeParamType, methodReturnType);
     }
   }
 
