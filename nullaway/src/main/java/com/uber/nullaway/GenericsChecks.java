@@ -170,6 +170,11 @@ public final class GenericsChecks {
             errorMessage, analysis.buildDescription(tree), state, null));
   }
 
+  public static Nullness getOverridingMethodReturnTypeNullness(
+      Symbol.MethodSymbol overridingMethod, Config config) {
+    return getTypeNullness(overridingMethod.getReturnType(), config);
+  }
+
   // TODO: Update error messages
   private void reportInvalidParametersNullabilityError(
       Type formalParameterType,
@@ -393,8 +398,8 @@ public final class GenericsChecks {
     Type nullableType = NULLABLE_TYPE_SUPPLIER.get(state);
     List<? extends Tree> typeArguments = tree.getTypeArguments();
     List<Type> newTypeArgs = new ArrayList<>();
-    boolean hasNullableAnnotation = false;
     for (int i = 0; i < typeArguments.size(); i++) {
+      boolean hasNullableAnnotation = false;
       AnnotatedTypeTree annotatedType = null;
       Tree curTypeArg = typeArguments.get(i);
       // If the type argument has an annotation, it will either be an AnnotatedTypeTree, or a
@@ -552,18 +557,20 @@ public final class GenericsChecks {
     if (!config.isJSpecifyMode()) {
       return;
     }
-    checkTypeParameterNullnessForOverridingMethodReturnType(tree, overridingMethod);
-    checkTypeParameterNullnessForOverridingMethodParameterType(
-        tree, overridingMethod, overriddenMethod);
+    Type methodWithTypeParams =
+        state.getTypes().memberType(overridingMethod.owner.type, overriddenMethod);
+    checkTypeParameterNullnessForOverridingMethodReturnType(
+        tree, overridingMethod, methodWithTypeParams);
+    checkTypeParameterNullnessForOverridingMethodParameterType(tree, methodWithTypeParams);
   }
 
   public Nullness getMethodParamNullness(
       int paramIndex, Symbol.MethodSymbol methodSymbol, Tree tree) {
-    if (tree instanceof JCTree.JCMethodInvocation == false) {
+    if (!(tree instanceof JCTree.JCMethodInvocation)) {
       return Nullness.NONNULL;
     }
     JCTree.JCMethodInvocation methodInvocationTree = (JCTree.JCMethodInvocation) tree;
-    if (methodInvocationTree.meth instanceof JCTree.JCFieldAccess == false) {
+    if (!(methodInvocationTree.meth instanceof JCTree.JCFieldAccess)) {
       return Nullness.NONNULL;
     }
     Type methodReceiverType = ((JCTree.JCFieldAccess) methodInvocationTree.meth).selected.type;
@@ -583,10 +590,8 @@ public final class GenericsChecks {
   }
 
   private void checkTypeParameterNullnessForOverridingMethodParameterType(
-      MethodTree tree, Symbol.MethodSymbol overridingMethod, Symbol.MethodSymbol overriddenMethod) {
+      MethodTree tree, Type methodWithTypeParams) {
     List<? extends VariableTree> methodParameters = tree.getParameters();
-    Type methodWithTypeParams =
-        state.getTypes().memberType(overridingMethod.owner.type, overriddenMethod);
     List<Type> typeParameterTypes = methodWithTypeParams.getParameterTypes();
     for (int i = 0; i < methodParameters.size(); i++) {
       Type methodParameterType = ASTHelpers.getType(methodParameters.get(i));
@@ -607,11 +612,8 @@ public final class GenericsChecks {
   }
 
   private void checkTypeParameterNullnessForOverridingMethodReturnType(
-      MethodTree tree, Symbol.MethodSymbol overridingMethod) {
-    Type typeParamType =
-        state
-            .getTypes()
-            .memberType(overridingMethod.owner.type, overridingMethod.getReturnType().tsym);
+      MethodTree tree, Symbol.MethodSymbol overridingMethod, Type methodWithTypeParams) {
+    Type typeParamType = methodWithTypeParams.getReturnType();
     if (!(typeParamType instanceof Type.ClassType
         && overridingMethod.getReturnType() instanceof Type.ClassType)) {
       return;
