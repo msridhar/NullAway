@@ -170,12 +170,6 @@ public final class GenericsChecks {
             errorMessage, analysis.buildDescription(tree), state, null));
   }
 
-  public static Nullness getOverridingMethodReturnTypeNullness(
-      Symbol.MethodSymbol overridingMethod, Config config) {
-    return getTypeNullness(overridingMethod.getReturnType(), config);
-  }
-
-  // TODO: Update error messages
   private void reportInvalidParametersNullabilityError(
       Type formalParameterType,
       Type actualParameterType,
@@ -444,6 +438,18 @@ public final class GenericsChecks {
     return finalType;
   }
 
+  /**
+   * The Nullness for the overridden method return type that is derived from the type parameter for
+   * the owner is by default considered as NonNull. This method computes and returns the Nullness of
+   * the method return type based on the Nullness of the corresponding instantiated type parameter
+   * for the owner
+   *
+   * @param overriddenMethod A symbol of the overridden method
+   * @param overridingMethodOwnerType An owner of the overriding method
+   * @param state Visitor state
+   * @param config The analysis config
+   * @return Returns the Nullness of the return type of the overridden method
+   */
   public static Nullness getOverriddenMethodReturnTypeNullness(
       Symbol.MethodSymbol overriddenMethod,
       Type overridingMethodOwnerType,
@@ -552,23 +558,48 @@ public final class GenericsChecks {
     }
   }
 
+  /**
+   * This method gets a method type with return type and method parameters having annotations of the
+   * corresponding type parameters of the owner and then use it to compare the nullability
+   * annotations of the return type and the method params with the corresponding type params of the
+   * owner.
+   *
+   * @param tree A method tree to check
+   * @param overridingMethod A symbol of the overriding method
+   * @param overriddenMethod A symbol of the overridden method
+   */
   public void checkTypeParameterNullnessForMethodOverriding(
       MethodTree tree, Symbol.MethodSymbol overridingMethod, Symbol.MethodSymbol overriddenMethod) {
     if (!config.isJSpecifyMode()) {
       return;
     }
+    // A method type with the return type and method parameters having the annotations of the type
+    // parameters of the
+    // owner if they are derived from the type parameters
     Type methodWithTypeParams =
         state.getTypes().memberType(overridingMethod.owner.type, overriddenMethod);
+
     checkTypeParameterNullnessForOverridingMethodReturnType(tree, methodWithTypeParams);
     checkTypeParameterNullnessForOverridingMethodParameterType(tree, methodWithTypeParams);
   }
 
+  /**
+   * The Nullness for the overriding method arguments that are derived from the type parameters for
+   * the owner are by default considered as NonNull. This method computes and returns the Nullness
+   * of the method arguments based on the Nullness of the corresponding instantiated type parameters
+   * for the owner
+   *
+   * @param paramIndex An index of the method parameter to get the Nullness
+   * @param methodSymbol A symbol of the overridden method
+   * @param tree A method tree to check
+   * @return Returns Nullness of the parameterIndex th parameter of the overriding method
+   */
   public Nullness getOverridingMethodParamNullness(
       int paramIndex, Symbol.MethodSymbol methodSymbol, Tree tree) {
     JCTree.JCMethodInvocation methodInvocationTree = (JCTree.JCMethodInvocation) tree;
     // if methodInvocationTree.meth is of type JCTree.JCIdent return Nullness.NONNULL
-    // if not in JSpecify mode then also the Nullness is set to Nullness.NONULL, so it won't affect
-    // the logic
+    // if not in JSpecify mode then also the Nullness is set to Nullness.NONNULL, so it won't affect
+    // the logic outside our scope
     if (!(methodInvocationTree.meth instanceof JCTree.JCFieldAccess)) {
       return Nullness.NONNULL;
     }
@@ -578,6 +609,17 @@ public final class GenericsChecks {
     return getTypeNullness(formalParamType, config);
   }
 
+  /**
+   * The Nullness for the overridden method arguments that are derived from the type parameters for
+   * the owner are by default considered as NonNull. This method computes and returns the Nullness
+   * of the method arguments based on the Nullness of the corresponding instantiated type parameters
+   * for the owner
+   *
+   * @param parameterIndex An index of the method parameter to get the Nullness
+   * @param overriddenMethod A symbol of the overridden method
+   * @param overridingMethodParam A paramIndex th parameter of the overriding method
+   * @return Returns Nullness of the parameterIndex th parameter of the overridden method
+   */
   public Nullness getOverriddenMethodArgNullness(
       int parameterIndex,
       Symbol.MethodSymbol overriddenMethod,
@@ -588,6 +630,14 @@ public final class GenericsChecks {
     return getTypeNullness(paramType, config);
   }
 
+  /**
+   * This method compares the type parameter annotations for the overriding method parameters with
+   * corresponding type parameters for the owner and reports an error if they don't match
+   *
+   * @param tree A method tree to check
+   * @param methodWithTypeParams A method type with the annotations of corresponding type parameters
+   *     of the owner of the overriding method
+   */
   private void checkTypeParameterNullnessForOverridingMethodParameterType(
       MethodTree tree, Type methodWithTypeParams) {
     List<? extends VariableTree> methodParameters = tree.getParameters();
@@ -610,6 +660,14 @@ public final class GenericsChecks {
     }
   }
 
+  /**
+   * This method compares the type parameter annotations for the overriding method return type with
+   * corresponding type parameters for the owner and reports an error if they don't match
+   *
+   * @param tree A method tree to check
+   * @param methodWithTypeParams A method type with the annotations of corresponding type parameters
+   *     of the owner of the overriding method
+   */
   private void checkTypeParameterNullnessForOverridingMethodReturnType(
       MethodTree tree, Type methodWithTypeParams) {
     Type typeParamType = methodWithTypeParams.getReturnType();
@@ -628,8 +686,8 @@ public final class GenericsChecks {
 
   /**
    * @param type A type for which we need the Nullness.
-   * @param config the analysis config
-   * @return returns the Nullness of the type based on the Nullability annotation.
+   * @param config The analysis config
+   * @return Returns the Nullness of the type based on the Nullability annotation.
    */
   private static Nullness getTypeNullness(Type type, Config config) {
     boolean hasNullableAnnotation =
