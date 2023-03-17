@@ -263,7 +263,6 @@ public final class GenericsChecks {
     if (!config.isJSpecifyMode()) {
       return;
     }
-
     Tree lhsTree;
     Tree rhsTree;
     if (tree instanceof VariableTree) {
@@ -297,6 +296,7 @@ public final class GenericsChecks {
     if (!config.isJSpecifyMode()) {
       return;
     }
+
     Type formalReturnType = methodSymbol.getReturnType();
     // check nullability of parameters only for generics
     if (formalReturnType.getTypeArguments().isEmpty()) {
