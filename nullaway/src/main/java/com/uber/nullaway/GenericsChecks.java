@@ -394,7 +394,6 @@ public final class GenericsChecks {
     List<? extends Tree> typeArguments = tree.getTypeArguments();
     List<Type> newTypeArgs = new ArrayList<>();
     for (int i = 0; i < typeArguments.size(); i++) {
-      boolean hasNullableAnnotation = false;
       AnnotatedTypeTree annotatedType = null;
       Tree curTypeArg = typeArguments.get(i);
       // If the type argument has an annotation, it will either be an AnnotatedTypeTree, or a
@@ -407,6 +406,7 @@ public final class GenericsChecks {
       }
       List<? extends AnnotationTree> annotations =
           annotatedType != null ? annotatedType.getAnnotations() : Collections.emptyList();
+      boolean hasNullableAnnotation = false;
       for (AnnotationTree annotation : annotations) {
         if (ASTHelpers.isSameType(
             nullableType, ASTHelpers.getType(annotation.getAnnotationType()), state)) {
