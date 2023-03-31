@@ -143,6 +143,7 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
           || !optLibraryModels.nullImpliesNullParameters(methodSymbol).isEmpty()) {
         // These mean the method might be null, depending on dataflow and arguments. We force
         // dataflow to run.
+        // TODO unexpected to see dataflow running here; I don't think it should be necessary
         return analysis.nullnessFromDataflow(state, expr) || exprMayBeNull;
       } else if (optLibraryModels.hasNonNullReturn(
           methodSymbol, state.getTypes(), !isMethodAnnotated)) {

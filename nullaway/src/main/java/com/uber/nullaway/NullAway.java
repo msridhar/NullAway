@@ -2317,8 +2317,8 @@ public class NullAway extends BugChecker
     if (!Nullness.hasNullableAnnotation(exprSymbol, config)) {
       exprMayBeNull = false;
     }
-    exprMayBeNull = handler.onOverrideMayBeNullExpr(this, expr, exprSymbol, state, exprMayBeNull);
-    return exprMayBeNull ? nullnessFromDataflow(state, expr) : false;
+    exprMayBeNull = exprMayBeNull && nullnessFromDataflow(state, expr);
+    return handler.onOverrideMayBeNullExpr(this, expr, exprSymbol, state, exprMayBeNull);
   }
 
   public boolean nullnessFromDataflow(VisitorState state, ExpressionTree expr) {
