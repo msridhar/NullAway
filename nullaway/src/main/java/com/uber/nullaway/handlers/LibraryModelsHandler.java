@@ -75,7 +75,7 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
   public LibraryModelsHandler(Config config) {
     super();
     this.config = config;
-    libraryModels = loadLibraryModels();
+    libraryModels = loadLibraryModels(config);
   }
 
   @Override
@@ -109,43 +109,52 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
   }
 
   @Override
-  public Nullness onOverrideMethodInvocationReturnNullability(
+  public Nullness onOverrideMethodReturnNullability(
       Symbol.MethodSymbol methodSymbol,
       VisitorState state,
       boolean isAnnotated,
       Nullness returnNullness) {
     OptimizedLibraryModels optLibraryModels = getOptLibraryModels(state.context);
     if (optLibraryModels.hasNonNullReturn(methodSymbol, state.getTypes(), !isAnnotated)) {
-      return Nullness.NONNULL;
+      return NONNULL;
+    } else if (optLibraryModels.hasNullableReturn(methodSymbol, state.getTypes(), !isAnnotated)) {
+      return NULLABLE;
     }
     return returnNullness;
   }
 
   @Override
   public boolean onOverrideMayBeNullExpr(
-      NullAway analysis, ExpressionTree expr, VisitorState state, boolean exprMayBeNull) {
-    if (expr.getKind() == Tree.Kind.METHOD_INVOCATION) {
-      OptimizedLibraryModels optLibraryModels = getOptLibraryModels(state.context);
-      Symbol.MethodSymbol methodSymbol = (Symbol.MethodSymbol) ASTHelpers.getSymbol(expr);
-      // When looking up library models of annotated code, we match the exact method signature only;
-      // overriding methods in subclasses must be explicitly given their own library model.
-      // When dealing with unannotated code, we default to generality: a model applies to a method
-      // and any of its overriding implementations.
-      // see https://github.com/uber/NullAway/issues/445 for why this is needed.
-      boolean isMethodAnnotated =
-          !getCodeAnnotationInfo(state.context).isSymbolUnannotated(methodSymbol, this.config);
-      if (optLibraryModels.hasNullableReturn(methodSymbol, state.getTypes(), !isMethodAnnotated)
-          || !optLibraryModels.nullImpliesNullParameters(methodSymbol).isEmpty()) {
-        // These mean the method might be null, depending on dataflow and arguments. We force
-        // dataflow to run.
-        return analysis.nullnessFromDataflow(state, expr) || exprMayBeNull;
-      } else if (optLibraryModels.hasNonNullReturn(
-          methodSymbol, state.getTypes(), !isMethodAnnotated)) {
-        // This means the method can't be null, so we return false outright.
-        return false;
-      }
+      NullAway analysis,
+      ExpressionTree expr,
+      @Nullable Symbol exprSymbol,
+      VisitorState state,
+      boolean exprMayBeNull) {
+    if (!(expr.getKind() == Tree.Kind.METHOD_INVOCATION
+        && exprSymbol instanceof Symbol.MethodSymbol)) {
+      return exprMayBeNull;
     }
-    return exprMayBeNull;
+    OptimizedLibraryModels optLibraryModels = getOptLibraryModels(state.context);
+    Symbol.MethodSymbol methodSymbol = (Symbol.MethodSymbol) exprSymbol;
+    // When looking up library models of annotated code, we match the exact method signature only;
+    // overriding methods in subclasses must be explicitly given their own library model.
+    // When dealing with unannotated code, we default to generality: a model applies to a method
+    // and any of its overriding implementations.
+    // see https://github.com/uber/NullAway/issues/445 for why this is needed.
+    boolean isMethodUnannotated =
+        getCodeAnnotationInfo(state.context).isSymbolUnannotated(methodSymbol, this.config);
+    if (exprMayBeNull) {
+      // This is the only case in which we may switch the result from @Nullable to @NonNull:
+      return !optLibraryModels.hasNonNullReturn(
+          methodSymbol, state.getTypes(), isMethodUnannotated);
+    }
+    if (optLibraryModels.hasNullableReturn(methodSymbol, state.getTypes(), isMethodUnannotated)) {
+      return true;
+    }
+    if (!optLibraryModels.nullImpliesNullParameters(methodSymbol).isEmpty()) {
+      return true;
+    }
+    return false;
   }
 
   @Override
@@ -183,14 +192,13 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
   @Override
   public NullnessHint onDataflowVisitMethodInvocation(
       MethodInvocationNode node,
+      Symbol.MethodSymbol callee,
       VisitorState state,
       AccessPath.AccessPathContext apContext,
       AccessPathNullnessPropagation.SubNodeValues inputs,
       AccessPathNullnessPropagation.Updates thenUpdates,
       AccessPathNullnessPropagation.Updates elseUpdates,
       AccessPathNullnessPropagation.Updates bothUpdates) {
-    Symbol.MethodSymbol callee = ASTHelpers.getSymbol(node.getTree());
-    Preconditions.checkNotNull(callee);
     boolean isMethodAnnotated =
         !getCodeAnnotationInfo(state.context).isSymbolUnannotated(callee, this.config);
     setUnconditionalArgumentNullness(bothUpdates, node.getArguments(), callee, state, apContext);
@@ -283,12 +291,12 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
     }
   }
 
-  private static LibraryModels loadLibraryModels() {
+  private static LibraryModels loadLibraryModels(Config config) {
     Iterable<LibraryModels> externalLibraryModels =
         ServiceLoader.load(LibraryModels.class, LibraryModels.class.getClassLoader());
     ImmutableSet.Builder<LibraryModels> libModelsBuilder = new ImmutableSet.Builder<>();
     libModelsBuilder.add(new DefaultLibraryModels()).addAll(externalLibraryModels);
-    return new CombinedLibraryModels(libModelsBuilder.build());
+    return new CombinedLibraryModels(libModelsBuilder.build(), config);
   }
 
   private static class DefaultLibraryModels implements LibraryModels {
@@ -444,6 +452,54 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
                     "org.junit.jupiter.api.Assertions",
                     "assertNotNull(java.lang.Object,java.util.function.Supplier<java.lang.String>)"),
                 0)
+            .put(methodRef("org.apache.commons.lang3.Validate", "<T>notNull(T)"), 0)
+            .put(
+                methodRef(
+                    "org.apache.commons.lang3.Validate",
+                    "<T>notNull(T,java.lang.String,java.lang.Object...)"),
+                0)
+            .put(
+                methodRef(
+                    "org.apache.commons.lang3.Validate",
+                    "<T>notEmpty(T[],java.lang.String,java.lang.Object...)"),
+                0)
+            .put(methodRef("org.apache.commons.lang3.Validate", "<T>notEmpty(T[])"), 0)
+            .put(
+                methodRef(
+                    "org.apache.commons.lang3.Validate",
+                    "<T>notEmpty(T,java.lang.String,java.lang.Object...)"),
+                0)
+            .put(methodRef("org.apache.commons.lang3.Validate", "<T>notEmpty(T)"), 0)
+            .put(
+                methodRef(
+                    "org.apache.commons.lang3.Validate",
+                    "<T>notBlank(T,java.lang.String,java.lang.Object...)"),
+                0)
+            .put(methodRef("org.apache.commons.lang3.Validate", "<T>notBlank(T)"), 0)
+            .put(
+                methodRef(
+                    "org.apache.commons.lang3.Validate",
+                    "<T>noNullElements(T[],java.lang.String,java.lang.Object...)"),
+                0)
+            .put(methodRef("org.apache.commons.lang3.Validate", "<T>noNullElements(T[])"), 0)
+            .put(
+                methodRef(
+                    "org.apache.commons.lang3.Validate",
+                    "<T>noNullElements(T,java.lang.String,java.lang.Object...)"),
+                0)
+            .put(methodRef("org.apache.commons.lang3.Validate", "<T>noNullElements(T)"), 0)
+            .put(
+                methodRef(
+                    "org.apache.commons.lang3.Validate",
+                    "<T>validIndex(T[],int,java.lang.String,java.lang.Object...)"),
+                0)
+            .put(methodRef("org.apache.commons.lang3.Validate", "<T>validIndex(T[],int)"), 0)
+            .put(
+                methodRef(
+                    "org.apache.commons.lang3.Validate",
+                    "<T>validIndex(T,int,java.lang.String,java.lang.Object...)"),
+                0)
+            .put(methodRef("org.apache.commons.lang3.Validate", "<T>validIndex(T,int)"), 0)
             .build();
 
     private static final ImmutableSetMultimap<MethodRef, Integer> EXPLICITLY_NULLABLE_PARAMETERS =
@@ -751,6 +807,8 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
 
   private static class CombinedLibraryModels implements LibraryModels {
 
+    private final Config config;
+
     private final ImmutableSetMultimap<MethodRef, Integer> failIfNullParameters;
 
     private final ImmutableSetMultimap<MethodRef, Integer> explicitlyNullableParameters;
@@ -769,7 +827,8 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
 
     private final ImmutableSetMultimap<MethodRef, Integer> castToNonNullMethods;
 
-    public CombinedLibraryModels(Iterable<LibraryModels> models) {
+    public CombinedLibraryModels(Iterable<LibraryModels> models, Config config) {
+      this.config = config;
       ImmutableSetMultimap.Builder<MethodRef, Integer> failIfNullParametersBuilder =
           new ImmutableSetMultimap.Builder<>();
       ImmutableSetMultimap.Builder<MethodRef, Integer> explicitlyNullableParametersBuilder =
@@ -788,34 +847,61 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
           new ImmutableSetMultimap.Builder<>();
       for (LibraryModels libraryModels : models) {
         for (Map.Entry<MethodRef, Integer> entry : libraryModels.failIfNullParameters().entries()) {
+          if (shouldSkipModel(entry.getKey())) {
+            continue;
+          }
           failIfNullParametersBuilder.put(entry);
         }
         for (Map.Entry<MethodRef, Integer> entry :
             libraryModels.explicitlyNullableParameters().entries()) {
+          if (shouldSkipModel(entry.getKey())) {
+            continue;
+          }
           explicitlyNullableParametersBuilder.put(entry);
         }
         for (Map.Entry<MethodRef, Integer> entry : libraryModels.nonNullParameters().entries()) {
+          if (shouldSkipModel(entry.getKey())) {
+            continue;
+          }
           nonNullParametersBuilder.put(entry);
         }
         for (Map.Entry<MethodRef, Integer> entry :
             libraryModels.nullImpliesTrueParameters().entries()) {
+          if (shouldSkipModel(entry.getKey())) {
+            continue;
+          }
           nullImpliesTrueParametersBuilder.put(entry);
         }
         for (Map.Entry<MethodRef, Integer> entry :
             libraryModels.nullImpliesFalseParameters().entries()) {
+          if (shouldSkipModel(entry.getKey())) {
+            continue;
+          }
           nullImpliesFalseParametersBuilder.put(entry);
         }
         for (Map.Entry<MethodRef, Integer> entry :
             libraryModels.nullImpliesNullParameters().entries()) {
+          if (shouldSkipModel(entry.getKey())) {
+            continue;
+          }
           nullImpliesNullParametersBuilder.put(entry);
         }
         for (MethodRef name : libraryModels.nullableReturns()) {
+          if (shouldSkipModel(name)) {
+            continue;
+          }
           nullableReturnsBuilder.add(name);
         }
         for (MethodRef name : libraryModels.nonNullReturns()) {
+          if (shouldSkipModel(name)) {
+            continue;
+          }
           nonNullReturnsBuilder.add(name);
         }
         for (Map.Entry<MethodRef, Integer> entry : libraryModels.castToNonNullMethods().entries()) {
+          if (shouldSkipModel(entry.getKey())) {
+            continue;
+          }
           castToNonNullMethodsBuilder.put(entry);
         }
       }
@@ -828,6 +914,10 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
       nullableReturns = nullableReturnsBuilder.build();
       nonNullReturns = nonNullReturnsBuilder.build();
       castToNonNullMethods = castToNonNullMethodsBuilder.build();
+    }
+
+    private boolean shouldSkipModel(MethodRef key) {
+      return config.isSkippedLibraryModel(key.enclosingClass + "." + key.methodName);
     }
 
     @Override

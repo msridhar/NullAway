@@ -53,20 +53,22 @@ public class NullAwayCustomLibraryModelsTests extends NullAwayTestsBase {
                 temporaryFolder.getRoot().getAbsolutePath(),
                 "-XepOpt:NullAway:AnnotatedPackages=com.uber"))
         .addSourceLines(
-            "Foo.java",
+            "AnnotatedWithModels.java",
             "package com.uber;",
-            "public class Foo {",
+            "public class AnnotatedWithModels {",
             "   Object field = new Object();",
-            "   Object bar() {",
-            "      return new Object();",
+            "   // implicitly @Nullable due to library model",
+            "   Object returnsNullFromModel() {",
+            "      // null is valid here only because of the library model",
+            "      return null;",
             "   }",
             "   Object nullableReturn() {",
             "       // BUG: Diagnostic contains: returning @Nullable",
-            "       return bar();",
+            "       return returnsNullFromModel();",
             "   }",
             "   void run() {",
             "       // just to make sure, flow analysis is also impacted by library models information",
-            "      Object temp = bar();",
+            "      Object temp = returnsNullFromModel();",
             "       // BUG: Diagnostic contains: assigning @Nullable",
             "      this.field = temp;",
             "   }",
@@ -102,6 +104,124 @@ public class NullAwayCustomLibraryModelsTests extends NullAwayTestsBase {
             "  }",
             "  void baz() {",
             "     // Safe to pass, since Function can't have a null instance parameter",
+            "     bar(Object::toString);",
+            "  }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void libraryModelsAndSelectiveSkippingViaCommandLineOptions() {
+    // First test with the library models in effect
+    makeLibraryModelsTestHelperWithArgs(
+            Arrays.asList(
+                "-d",
+                temporaryFolder.getRoot().getAbsolutePath(),
+                "-XepOpt:NullAway:AnnotatedPackages=com.uber",
+                "-XepOpt:NullAway:UnannotatedSubPackages=com.uber.lib.unannotated"))
+        .addSourceLines(
+            "CallMethods.java",
+            "package com.uber;",
+            "import com.uber.lib.unannotated.UnannotatedWithModels;",
+            "import javax.annotation.Nullable;",
+            "public class CallMethods {",
+            "  Object testWithoutCheck(UnannotatedWithModels u) {",
+            "     // BUG: Diagnostic contains: returning @Nullable expression from method with @NonNull return type",
+            "     return u.returnsNullUnannotated();",
+            "  }",
+            "  Object testWithCheck(@Nullable Object o) {",
+            "     if (UnannotatedWithModels.isNonNull(o)) {",
+            "       return o;",
+            "     }",
+            "     return new Object();",
+            "  }",
+            "}")
+        .addSourceLines(
+            "OverrideCheck.java",
+            "package com.uber;",
+            "import com.uber.lib.unannotated.UnannotatedWithModels;",
+            "import javax.annotation.Nullable;",
+            "public class OverrideCheck extends UnannotatedWithModels {",
+            "  @Nullable",
+            "  public Object returnsNullUnannotated() {",
+            "     return null;",
+            "  }",
+            "}")
+        .doTest();
+    // Now test disabling the library model
+    makeLibraryModelsTestHelperWithArgs(
+            Arrays.asList(
+                "-d",
+                temporaryFolder.getRoot().getAbsolutePath(),
+                "-XepOpt:NullAway:AnnotatedPackages=com.uber",
+                "-XepOpt:NullAway:UnannotatedSubPackages=com.uber.lib.unannotated",
+                "-XepOpt:NullAway:IgnoreLibraryModelsFor=com.uber.lib.unannotated.UnannotatedWithModels.returnsNullUnannotated,com.uber.lib.unannotated.UnannotatedWithModels.isNonNull"))
+        .addSourceLines(
+            "CallMethods.java",
+            "package com.uber;",
+            "import com.uber.lib.unannotated.UnannotatedWithModels;",
+            "import javax.annotation.Nullable;",
+            "public class CallMethods {",
+            "  Object testWithoutCheck(UnannotatedWithModels u) {",
+            "     // Ok. Library model ignored",
+            "     return u.returnsNullUnannotated();",
+            "  }",
+            "  Object testWithoutCheckNonIgnoredMethod(UnannotatedWithModels u) {",
+            "     // BUG: Diagnostic contains: returning @Nullable expression from method with @NonNull return type",
+            "     return u.returnsNullUnannotated2();",
+            "  }",
+            "  Object testWithCheck(@Nullable Object o) {",
+            "     if (UnannotatedWithModels.isNonNull(o)) {",
+            "       // BUG: Diagnostic contains: returning @Nullable expression from method with @NonNull return type",
+            "       return o;",
+            "     }",
+            "     return new Object();",
+            "  }",
+            "}")
+        .addSourceLines(
+            "OverrideCheck.java",
+            "package com.uber;",
+            "import com.uber.lib.unannotated.UnannotatedWithModels;",
+            "import javax.annotation.Nullable;",
+            "public class OverrideCheck extends UnannotatedWithModels {",
+            "  @Nullable", // Still safe, because the method is not @NonNull, it's unannotated
+            // without model!
+            "  public Object returnsNullUnannotated() {",
+            "     return null;",
+            "  }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void libraryModelsAndSelectiveSkippingViaCommandLineOptions2() {
+    makeLibraryModelsTestHelperWithArgs(
+            Arrays.asList(
+                "-d",
+                temporaryFolder.getRoot().getAbsolutePath(),
+                "-XepOpt:NullAway:AnnotatedPackages=com.uber",
+                "-XepOpt:NullAway:UnannotatedSubPackages=com.uber.lib.unannotated",
+                "-XepOpt:NullAway:AcknowledgeRestrictiveAnnotations=true",
+                "-XepOpt:NullAway:IgnoreLibraryModelsFor=com.uber.lib.unannotated.RestrictivelyAnnotatedFIWithModelOverride.apply"))
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import com.uber.lib.unannotated.RestrictivelyAnnotatedFIWithModelOverride;",
+            "import javax.annotation.Nullable;",
+            "public class Test {",
+            "  void bar(RestrictivelyAnnotatedFIWithModelOverride f) {",
+            "     // Param is @NullableDecl in bytecode, and library model making it non-null is skipped",
+            "     f.apply(null);",
+            "  }",
+            "  void foo() {",
+            "    RestrictivelyAnnotatedFIWithModelOverride func = (x) -> {",
+            "     // Param is @NullableDecl in bytecode, and overriding library model is ignored, thus unsafe",
+            "     // BUG: Diagnostic contains: dereferenced expression x is @Nullable",
+            "     return x.toString();",
+            "    };",
+            "  }",
+            "  void baz() {",
+            "     // BUG: Diagnostic contains: unbound instance method reference cannot be used",
             "     bar(Object::toString);",
             "  }",
             "}")

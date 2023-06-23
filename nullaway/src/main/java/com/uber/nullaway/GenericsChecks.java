@@ -1,6 +1,7 @@
 package com.uber.nullaway;
 
 import static com.uber.nullaway.NullabilityUtil.castToNonNull;
+import static java.util.stream.Collectors.joining;
 
 import com.google.common.base.Preconditions;
 import com.google.errorprone.VisitorState;
@@ -10,11 +11,15 @@ import com.google.errorprone.util.ASTHelpers;
 import com.sun.source.tree.AnnotatedTypeTree;
 import com.sun.source.tree.AnnotationTree;
 import com.sun.source.tree.AssignmentTree;
+import com.sun.source.tree.ConditionalExpressionTree;
+import com.sun.source.tree.ExpressionTree;
 import com.sun.source.tree.NewClassTree;
 import com.sun.source.tree.ParameterizedTypeTree;
 import com.sun.source.tree.Tree;
 import com.sun.source.tree.VariableTree;
 import com.sun.tools.javac.code.Attribute;
+import com.sun.tools.javac.code.BoundKind;
+import com.sun.tools.javac.code.Symbol;
 import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.TypeMetadata;
 import com.sun.tools.javac.code.Types;
@@ -23,6 +28,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import javax.annotation.Nullable;
 
 /** Methods for performing checks related to generic types and nullability. */
 public final class GenericsChecks {
@@ -121,13 +127,95 @@ public final class GenericsChecks {
             ErrorMessage.MessageTypes.ASSIGN_GENERIC_NULLABLE,
             String.format(
                 "Cannot assign from type "
-                    + rhsType
+                    + prettyTypeForError(rhsType)
                     + " to type "
-                    + lhsType
+                    + prettyTypeForError(lhsType)
                     + " due to mismatched nullability of type parameters"));
     state.reportMatch(
         errorBuilder.createErrorDescription(
             errorMessage, analysis.buildDescription(tree), state, null));
+  }
+
+  private static void reportInvalidReturnTypeError(
+      Tree tree, Type methodType, Type returnType, VisitorState state, NullAway analysis) {
+    ErrorBuilder errorBuilder = analysis.getErrorBuilder();
+    ErrorMessage errorMessage =
+        new ErrorMessage(
+            ErrorMessage.MessageTypes.RETURN_NULLABLE_GENERIC,
+            String.format(
+                "Cannot return expression of type "
+                    + prettyTypeForError(returnType)
+                    + " from method with return type "
+                    + prettyTypeForError(methodType)
+                    + " due to mismatched nullability of type parameters"));
+    state.reportMatch(
+        errorBuilder.createErrorDescription(
+            errorMessage, analysis.buildDescription(tree), state, null));
+  }
+
+  private static void reportMismatchedTypeForTernaryOperator(
+      Tree tree, Type expressionType, Type subPartType, VisitorState state, NullAway analysis) {
+    ErrorBuilder errorBuilder = analysis.getErrorBuilder();
+    ErrorMessage errorMessage =
+        new ErrorMessage(
+            ErrorMessage.MessageTypes.ASSIGN_GENERIC_NULLABLE,
+            String.format(
+                "Conditional expression must have type "
+                    + prettyTypeForError(expressionType)
+                    + " but the sub-expression has type "
+                    + prettyTypeForError(subPartType)
+                    + ", which has mismatched nullability of type parameters"));
+    state.reportMatch(
+        errorBuilder.createErrorDescription(
+            errorMessage, analysis.buildDescription(tree), state, null));
+  }
+
+  private void reportInvalidParametersNullabilityError(
+      Type formalParameterType,
+      Type actualParameterType,
+      ExpressionTree paramExpression,
+      VisitorState state,
+      NullAway analysis) {
+    ErrorBuilder errorBuilder = analysis.getErrorBuilder();
+    ErrorMessage errorMessage =
+        new ErrorMessage(
+            ErrorMessage.MessageTypes.PASS_NULLABLE_GENERIC,
+            "Cannot pass parameter of type "
+                + prettyTypeForError(actualParameterType)
+                + ", as formal parameter has type "
+                + prettyTypeForError(formalParameterType)
+                + ", which has mismatched type parameter nullability");
+    state.reportMatch(
+        errorBuilder.createErrorDescription(
+            errorMessage, analysis.buildDescription(paramExpression), state, null));
+  }
+
+  /**
+   * This method returns the type of the given tree, including any type use annotations.
+   *
+   * <p>This method is required because in some cases, the type returned by {@link
+   * com.google.errorprone.util.ASTHelpers#getType(Tree)} fails to preserve type use annotations,
+   * particularly when dealing with {@link com.sun.source.tree.NewClassTree} (e.g., {@code new
+   * Foo<@Nullable A>}).
+   *
+   * @param tree A tree for which we need the type with preserved annotations.
+   * @return Type of the tree with preserved annotations.
+   */
+  @Nullable
+  private Type getTreeType(Tree tree) {
+    if (tree instanceof NewClassTree
+        && ((NewClassTree) tree).getIdentifier() instanceof ParameterizedTypeTree) {
+      ParameterizedTypeTree paramTypedTree =
+          (ParameterizedTypeTree) ((NewClassTree) tree).getIdentifier();
+      if (paramTypedTree.getTypeArguments().isEmpty()) {
+        // diamond operator, which we do not yet support; for now, return null
+        // TODO: support diamond operators
+        return null;
+      }
+      return typeWithPreservedAnnotations(paramTypedTree);
+    } else {
+      return ASTHelpers.getType(tree);
+    }
   }
 
   /**
@@ -159,23 +247,39 @@ public final class GenericsChecks {
     if (rhsTree == null || rhsTree.getKind().equals(Tree.Kind.NULL_LITERAL)) {
       return;
     }
-    Type lhsType = ASTHelpers.getType(lhsTree);
-    Type rhsType = ASTHelpers.getType(rhsTree);
-    // For NewClassTrees with annotated type parameters, javac does not preserve the annotations in
-    // its computed type for the expression.  As a workaround, we construct a replacement Type
-    // object with the appropriate annotations.
-    if (rhsTree instanceof NewClassTree
-        && ((NewClassTree) rhsTree).getIdentifier() instanceof ParameterizedTypeTree) {
-      ParameterizedTypeTree paramTypedTree =
-          (ParameterizedTypeTree) ((NewClassTree) rhsTree).getIdentifier();
-      if (paramTypedTree.getTypeArguments().isEmpty()) {
-        // no explicit type parameters
-        return;
-      }
-      rhsType = typeWithPreservedAnnotations(paramTypedTree);
-    }
+    Type lhsType = getTreeType(lhsTree);
+    Type rhsType = getTreeType(rhsTree);
+
     if (lhsType instanceof Type.ClassType && rhsType instanceof Type.ClassType) {
-      compareNullabilityAnnotations((Type.ClassType) lhsType, (Type.ClassType) rhsType, tree);
+      boolean isAssignmentValid =
+          compareNullabilityAnnotations((Type.ClassType) lhsType, (Type.ClassType) rhsType);
+      if (!isAssignmentValid) {
+        reportInvalidAssignmentInstantiationError(tree, lhsType, rhsType, state, analysis);
+      }
+    }
+  }
+
+  public void checkTypeParameterNullnessForFunctionReturnType(
+      ExpressionTree retExpr, Symbol.MethodSymbol methodSymbol) {
+    if (!config.isJSpecifyMode()) {
+      return;
+    }
+
+    Type formalReturnType = methodSymbol.getReturnType();
+    // check nullability of parameters only for generics
+    if (formalReturnType.getTypeArguments().isEmpty()) {
+      return;
+    }
+    Type returnExpressionType = getTreeType(retExpr);
+    if (formalReturnType instanceof Type.ClassType
+        && returnExpressionType instanceof Type.ClassType) {
+      boolean isReturnTypeValid =
+          compareNullabilityAnnotations(
+              (Type.ClassType) formalReturnType, (Type.ClassType) returnExpressionType);
+      if (!isReturnTypeValid) {
+        reportInvalidReturnTypeError(
+            retExpr, formalReturnType, returnExpressionType, state, analysis);
+      }
     }
   }
 
@@ -189,10 +293,8 @@ public final class GenericsChecks {
    *
    * @param lhsType type for the lhs of the assignment
    * @param rhsType type for the rhs of the assignment
-   * @param tree tree representing the assignment
    */
-  private void compareNullabilityAnnotations(
-      Type.ClassType lhsType, Type.ClassType rhsType, Tree tree) {
+  private boolean compareNullabilityAnnotations(Type.ClassType lhsType, Type.ClassType rhsType) {
     Types types = state.getTypes();
     // The base type of rhsType may be a subtype of lhsType's base type.  In such cases, we must
     // compare lhsType against the supertype of rhsType with a matching base type.
@@ -232,15 +334,17 @@ public final class GenericsChecks {
         }
       }
       if (isLHSNullableAnnotated != isRHSNullableAnnotated) {
-        reportInvalidAssignmentInstantiationError(tree, lhsType, rhsType, state, analysis);
-        return;
+        return false;
       }
       // nested generics
       if (lhsTypeArgument.getTypeArguments().length() > 0) {
-        compareNullabilityAnnotations(
-            (Type.ClassType) lhsTypeArgument, (Type.ClassType) rhsTypeArgument, tree);
+        if (!compareNullabilityAnnotations(
+            (Type.ClassType) lhsTypeArgument, (Type.ClassType) rhsTypeArgument)) {
+          return false;
+        }
       }
     }
+    return true;
   }
 
   /**
@@ -302,4 +406,161 @@ public final class GenericsChecks {
             type.getEnclosingType(), com.sun.tools.javac.util.List.from(newTypeArgs), type.tsym);
     return finalType;
   }
+
+  /**
+   * For a conditional expression <em>c</em>, check whether the type parameter nullability for each
+   * sub-expression of <em>c</em> matches the type parameter nullability of <em>c</em> itself.
+   *
+   * <p>Note that the type parameter nullability for <em>c</em> is computed by javac and reflects
+   * what is required of the surrounding context (an assignment, parameter pass, etc.). It is
+   * possible that both sub-expressions of <em>c</em> will have identical type parameter
+   * nullability, but will still not match the type parameter nullability of <em>c</em> itself, due
+   * to requirements from the surrounding context. In such a case, our error messages may be
+   * somewhat confusing; we may want to improve this in the future.
+   *
+   * @param tree A conditional expression tree to check
+   */
+  public void checkTypeParameterNullnessForConditionalExpression(ConditionalExpressionTree tree) {
+    if (!config.isJSpecifyMode()) {
+      return;
+    }
+
+    Tree truePartTree = tree.getTrueExpression();
+    Tree falsePartTree = tree.getFalseExpression();
+
+    Type condExprType = getTreeType(tree);
+    Type truePartType = getTreeType(truePartTree);
+    Type falsePartType = getTreeType(falsePartTree);
+    // The condExpr type should be the least-upper bound of the true and false part types.  To check
+    // the nullability annotations, we check that the true and false parts are assignable to the
+    // type of the whole expression
+    if (condExprType instanceof Type.ClassType) {
+      if (truePartType instanceof Type.ClassType) {
+        if (!compareNullabilityAnnotations(
+            (Type.ClassType) condExprType, (Type.ClassType) truePartType)) {
+          reportMismatchedTypeForTernaryOperator(
+              truePartTree, condExprType, truePartType, state, analysis);
+        }
+      }
+      if (falsePartType instanceof Type.ClassType) {
+        if (!compareNullabilityAnnotations(
+            (Type.ClassType) condExprType, (Type.ClassType) falsePartType)) {
+          reportMismatchedTypeForTernaryOperator(
+              falsePartTree, condExprType, falsePartType, state, analysis);
+        }
+      }
+    }
+  }
+
+  /**
+   * Checks that for each parameter p at a call, the type parameter nullability for p's type matches
+   * that of the corresponding formal parameter. If a mismatch is found, report an error.
+   *
+   * @param formalParams the formal parameters
+   * @param actualParams the actual parameters
+   * @param isVarArgs true if the call is to a varargs method
+   */
+  public void compareGenericTypeParameterNullabilityForCall(
+      List<Symbol.VarSymbol> formalParams,
+      List<? extends ExpressionTree> actualParams,
+      boolean isVarArgs) {
+    if (!config.isJSpecifyMode()) {
+      return;
+    }
+    int n = formalParams.size();
+    if (isVarArgs) {
+      // If the last argument is var args, don't check it now, it will be checked against
+      // all remaining actual arguments in the next loop.
+      n = n - 1;
+    }
+    for (int i = 0; i < n - 1; i++) {
+      Type formalParameter = formalParams.get(i).type;
+      if (!formalParameter.getTypeArguments().isEmpty()) {
+        Type actualParameter = getTreeType(actualParams.get(i));
+        if (formalParameter instanceof Type.ClassType
+            && actualParameter instanceof Type.ClassType) {
+          if (!compareNullabilityAnnotations(
+              (Type.ClassType) formalParameter, (Type.ClassType) actualParameter)) {
+            reportInvalidParametersNullabilityError(
+                formalParameter, actualParameter, actualParams.get(i), state, analysis);
+          }
+        }
+      }
+    }
+    if (isVarArgs && !formalParams.isEmpty()) {
+      Type.ArrayType varargsArrayType =
+          (Type.ArrayType) formalParams.get(formalParams.size() - 1).type;
+      Type varargsElementType = varargsArrayType.elemtype;
+      if (varargsElementType.getTypeArguments().size() > 0) {
+        for (int i = formalParams.size() - 1; i < actualParams.size(); i++) {
+          Type actualParameter = getTreeType(actualParams.get(i));
+          if (varargsElementType instanceof Type.ClassType
+              && actualParameter instanceof Type.ClassType) {
+            if (!compareNullabilityAnnotations(
+                (Type.ClassType) varargsElementType, (Type.ClassType) actualParameter)) {
+              reportInvalidParametersNullabilityError(
+                  varargsElementType, actualParameter, actualParams.get(i), state, analysis);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Returns a pretty-printed representation of type suitable for error messages. The representation
+   * uses simple names rather than fully-qualified names, and retains all type-use annotations.
+   */
+  public static String prettyTypeForError(Type type) {
+    return type.accept(PRETTY_TYPE_VISITOR, null);
+  }
+
+  /** This code is a modified version of code in {@link com.google.errorprone.util.Signatures} */
+  private static final Type.Visitor<String, Void> PRETTY_TYPE_VISITOR =
+      new Types.DefaultTypeVisitor<String, Void>() {
+        @Override
+        public String visitWildcardType(Type.WildcardType t, Void unused) {
+          StringBuilder sb = new StringBuilder();
+          sb.append(t.kind);
+          if (t.kind != BoundKind.UNBOUND) {
+            sb.append(t.type.accept(this, null));
+          }
+          return sb.toString();
+        }
+
+        @Override
+        public String visitClassType(Type.ClassType t, Void s) {
+          StringBuilder sb = new StringBuilder();
+          for (Attribute.TypeCompound compound : t.getAnnotationMirrors()) {
+            sb.append('@');
+            sb.append(compound.type.accept(this, null));
+            sb.append(' ');
+          }
+          sb.append(t.tsym.getSimpleName());
+          if (t.getTypeArguments().nonEmpty()) {
+            sb.append('<');
+            sb.append(
+                t.getTypeArguments().stream()
+                    .map(a -> a.accept(this, null))
+                    .collect(joining(", ")));
+            sb.append(">");
+          }
+          return sb.toString();
+        }
+
+        @Override
+        public String visitCapturedType(Type.CapturedType t, Void s) {
+          return t.wildcard.accept(this, null);
+        }
+
+        @Override
+        public String visitArrayType(Type.ArrayType t, Void unused) {
+          return t.elemtype.accept(this, null) + "[]";
+        }
+
+        @Override
+        public String visitType(Type t, Void s) {
+          return t.toString();
+        }
+      };
 }

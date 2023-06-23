@@ -315,7 +315,6 @@ public class NullAway extends BugChecker
   }
 
   private boolean checkMarkingForPath(VisitorState state) {
-    Symbol enclosingMarkableSymbol;
     TreePath path = state.getPath();
     Tree currentTree = path.getLeaf();
     // Find the closest class or method symbol, since those are the only ones we have code
@@ -334,7 +333,10 @@ public class NullAway extends BugChecker
       }
       currentTree = path.getLeaf();
     }
-    enclosingMarkableSymbol = ASTHelpers.getSymbol(currentTree);
+    Symbol enclosingMarkableSymbol = ASTHelpers.getSymbol(currentTree);
+    if (enclosingMarkableSymbol == null) {
+      return false;
+    }
     return !codeAnnotationInfo.isSymbolUnannotated(enclosingMarkableSymbol, config);
   }
 
@@ -619,7 +621,7 @@ public class NullAway extends BugChecker
     // package)
     Symbol.MethodSymbol methodSymbol = ASTHelpers.getSymbol(tree);
     handler.onMatchMethod(this, tree, state, methodSymbol);
-    boolean isOverriding = ASTHelpers.hasAnnotation(methodSymbol, Override.class, state);
+    boolean isOverriding = ASTHelpers.hasAnnotation(methodSymbol, "java.lang.Override", state);
     boolean exhaustiveOverride = config.exhaustiveOverride();
     if (isOverriding || !exhaustiveOverride) {
       Symbol.MethodSymbol closestOverriddenMethod =
@@ -806,6 +808,21 @@ public class NullAway extends BugChecker
     return Trees.instance(JavacProcessingEnvironment.instance(state.context));
   }
 
+  private Nullness getMethodReturnNullness(
+      Symbol.MethodSymbol methodSymbol, VisitorState state, Nullness defaultForUnannotated) {
+    final boolean isMethodAnnotated = !codeAnnotationInfo.isSymbolUnannotated(methodSymbol, config);
+    Nullness methodReturnNullness =
+        defaultForUnannotated; // Permissive default for unannotated code.
+    if (isMethodAnnotated) {
+      methodReturnNullness =
+          Nullness.hasNullableAnnotation(methodSymbol, config)
+              ? Nullness.NULLABLE
+              : Nullness.NONNULL;
+    }
+    return handler.onOverrideMethodReturnNullability(
+        methodSymbol, state, isMethodAnnotated, methodReturnNullness);
+  }
+
   private Description checkReturnExpression(
       Tree tree, ExpressionTree retExpr, Symbol.MethodSymbol methodSymbol, VisitorState state) {
     Type returnType = methodSymbol.getReturnType();
@@ -820,8 +837,7 @@ public class NullAway extends BugChecker
       // support)
       return Description.NO_MATCH;
     }
-    if (codeAnnotationInfo.isSymbolUnannotated(methodSymbol, config)
-        || Nullness.hasNullableAnnotation(methodSymbol, config)) {
+    if (getMethodReturnNullness(methodSymbol, state, Nullness.NULLABLE).equals(Nullness.NULLABLE)) {
       return Description.NO_MATCH;
     }
     if (mayBeNullExpr(state, retExpr)) {
@@ -834,6 +850,8 @@ public class NullAway extends BugChecker
           state,
           methodSymbol);
     }
+    new GenericsChecks(state, config, this)
+        .checkTypeParameterNullnessForFunctionReturnType(retExpr, methodSymbol);
     return Description.NO_MATCH;
   }
 
@@ -904,63 +922,41 @@ public class NullAway extends BugChecker
       Symbol.MethodSymbol overridingMethod,
       @Nullable MemberReferenceTree memberReferenceTree,
       VisitorState state) {
-    final boolean isOverriddenMethodAnnotated =
-        !codeAnnotationInfo.isSymbolUnannotated(overriddenMethod, config);
-    Nullness overriddenMethodReturnNullness =
-        Nullness.NULLABLE; // Permissive default for unannotated code.
-    if (isOverriddenMethodAnnotated && !Nullness.hasNullableAnnotation(overriddenMethod, config)) {
-      overriddenMethodReturnNullness = Nullness.NONNULL;
-    }
-    overriddenMethodReturnNullness =
-        handler.onOverrideMethodInvocationReturnNullability(
-            overriddenMethod, state, isOverriddenMethodAnnotated, overriddenMethodReturnNullness);
-    // if the super method returns nonnull,
-    // overriding method better not return nullable
-    if (overriddenMethodReturnNullness.equals(Nullness.NONNULL)) {
-      final boolean isOverridingMethodAnnotated =
-          !codeAnnotationInfo.isSymbolUnannotated(overridingMethod, config);
-      // Note that, for the overriding method, the permissive default is non-null.
-      Nullness overridingMethodReturnNullness = Nullness.NONNULL;
-      if (isOverridingMethodAnnotated && Nullness.hasNullableAnnotation(overridingMethod, config)) {
-        overridingMethodReturnNullness = Nullness.NULLABLE;
-      }
-      // We must once again check the handler chain, to allow it to update nullability of the
-      // overriding method
-      // (e.g. through AcknowledgeRestrictiveAnnotations=true)
-      overridingMethodReturnNullness =
-          handler.onOverrideMethodInvocationReturnNullability(
-              overridingMethod, state, isOverridingMethodAnnotated, overridingMethodReturnNullness);
-      if (overridingMethodReturnNullness.equals(Nullness.NULLABLE)
-          && (memberReferenceTree == null
-              || getComputedNullness(memberReferenceTree).equals(Nullness.NULLABLE))) {
-        String message;
-        if (memberReferenceTree != null) {
-          message =
-              "referenced method returns @Nullable, but functional interface method "
-                  + ASTHelpers.enclosingClass(overriddenMethod)
-                  + "."
-                  + overriddenMethod.toString()
-                  + " returns @NonNull";
+    // if the super method returns nonnull, overriding method better not return nullable
+    // Note that, for the overriding method, the permissive default is non-null,
+    // but it's nullable for the overridden one.
+    if (getMethodReturnNullness(overriddenMethod, state, Nullness.NULLABLE).equals(Nullness.NONNULL)
+        && getMethodReturnNullness(overridingMethod, state, Nullness.NONNULL)
+            .equals(Nullness.NULLABLE)
+        && (memberReferenceTree == null
+            || getComputedNullness(memberReferenceTree).equals(Nullness.NULLABLE))) {
+      String message;
+      if (memberReferenceTree != null) {
+        message =
+            "referenced method returns @Nullable, but functional interface method "
+                + ASTHelpers.enclosingClass(overriddenMethod)
+                + "."
+                + overriddenMethod.toString()
+                + " returns @NonNull";
 
-        } else {
-          message =
-              "method returns @Nullable, but superclass method "
-                  + ASTHelpers.enclosingClass(overriddenMethod)
-                  + "."
-                  + overriddenMethod.toString()
-                  + " returns @NonNull";
-        }
-
-        Tree errorTree =
-            memberReferenceTree != null
-                ? memberReferenceTree
-                : getTreesInstance(state).getTree(overridingMethod);
-        return errorBuilder.createErrorDescription(
-            new ErrorMessage(MessageTypes.WRONG_OVERRIDE_RETURN, message),
-            buildDescription(errorTree),
-            state,
-            overriddenMethod);
+      } else {
+        message =
+            "method returns @Nullable, but superclass method "
+                + ASTHelpers.enclosingClass(overriddenMethod)
+                + "."
+                + overriddenMethod.toString()
+                + " returns @NonNull";
       }
+
+      Tree errorTree =
+          memberReferenceTree != null
+              ? memberReferenceTree
+              : getTreesInstance(state).getTree(overridingMethod);
+      return errorBuilder.createErrorDescription(
+          new ErrorMessage(MessageTypes.WRONG_OVERRIDE_RETURN, message),
+          buildDescription(errorTree),
+          state,
+          overriddenMethod);
     }
     // if any parameter in the super method is annotated @Nullable,
     // overriding method cannot assume @Nonnull
@@ -1491,6 +1487,8 @@ public class NullAway extends BugChecker
   public Description matchConditionalExpression(
       ConditionalExpressionTree tree, VisitorState state) {
     if (withinAnnotatedCode(state)) {
+      new GenericsChecks(state, config, this)
+          .checkTypeParameterNullnessForConditionalExpression(tree);
       doUnboxingCheck(state, tree.getCondition());
     }
     return Description.NO_MATCH;
@@ -1618,6 +1616,9 @@ public class NullAway extends BugChecker
                   : Nullness.NONNULL;
         }
       }
+      new GenericsChecks(state, config, this)
+          .compareGenericTypeParameterNullabilityForCall(
+              formalParams, actualParams, methodSymbol.isVarArgs());
     }
 
     // Allow handlers to override the list of non-null argument positions
@@ -2188,18 +2189,13 @@ public class NullAway extends BugChecker
       // obviously not null
       return false;
     }
-    // the logic here is to avoid doing dataflow analysis whenever possible
-    Symbol exprSymbol = ASTHelpers.getSymbol(expr);
-    boolean exprMayBeNull;
+    // return early for expressions that no handler overrides and will not need dataflow analysis
     switch (expr.getKind()) {
       case NULL_LITERAL:
         // obviously null
-        exprMayBeNull = true;
-        break;
+        return true;
       case ARRAY_ACCESS:
         // unsound!  we cannot check for nullness of array contents yet
-        exprMayBeNull = false;
-        break;
       case NEW_CLASS:
       case NEW_ARRAY:
         // for string concatenation, auto-boxing
@@ -2249,60 +2245,67 @@ public class NullAway extends BugChecker
       case RIGHT_SHIFT:
       case UNSIGNED_RIGHT_SHIFT:
         // clearly not null
-        exprMayBeNull = false;
+        return false;
+      default:
         break;
+    }
+    // the logic here is to avoid doing dataflow analysis whenever possible
+    Symbol exprSymbol = ASTHelpers.getSymbol(expr);
+    boolean exprMayBeNull;
+    switch (expr.getKind()) {
       case MEMBER_SELECT:
         if (exprSymbol == null) {
           throw new IllegalStateException(
               "unexpected null symbol for dereference expression " + state.getSourceForNode(expr));
         }
-        exprMayBeNull = mayBeNullFieldAccess(state, expr, exprSymbol);
+        exprMayBeNull =
+            NullabilityUtil.mayBeNullFieldFromType(exprSymbol, config, codeAnnotationInfo);
         break;
       case IDENTIFIER:
         if (exprSymbol == null) {
           throw new IllegalStateException(
               "unexpected null symbol for identifier " + state.getSourceForNode(expr));
         }
-        if (exprSymbol.getKind().equals(ElementKind.FIELD)) {
-          // Special case: mayBeNullFieldAccess runs handler.onOverrideMayBeNullExpr before
-          // dataflow.
-          return mayBeNullFieldAccess(state, expr, exprSymbol);
+        if (exprSymbol.getKind() == ElementKind.FIELD) {
+          exprMayBeNull =
+              NullabilityUtil.mayBeNullFieldFromType(exprSymbol, config, codeAnnotationInfo);
         } else {
-          // Check handler.onOverrideMayBeNullExpr before dataflow.
-          exprMayBeNull = handler.onOverrideMayBeNullExpr(this, expr, state, true);
-          return exprMayBeNull ? nullnessFromDataflow(state, expr) : false;
+          // rely on dataflow analysis for local variables
+          exprMayBeNull = true;
         }
+        break;
       case METHOD_INVOCATION:
-        // Special case: mayBeNullMethodCall runs handler.onOverrideMayBeNullExpr before dataflow.
-        return mayBeNullMethodCall(state, expr, (Symbol.MethodSymbol) exprSymbol);
+        if (!(exprSymbol instanceof Symbol.MethodSymbol)) {
+          throw new IllegalStateException(
+              "unexpected symbol "
+                  + exprSymbol
+                  + " for method invocation "
+                  + state.getSourceForNode(expr));
+        }
+        exprMayBeNull = mayBeNullMethodCall((Symbol.MethodSymbol) exprSymbol);
+        break;
       case CONDITIONAL_EXPRESSION:
       case ASSIGNMENT:
-        exprMayBeNull = nullnessFromDataflow(state, expr);
+        exprMayBeNull = true;
         break;
       default:
         // match switch expressions by comparing strings, so the code compiles on JDK versions < 12
         if (expr.getKind().name().equals("SWITCH_EXPRESSION")) {
-          exprMayBeNull = nullnessFromDataflow(state, expr);
+          exprMayBeNull = true;
         } else {
           throw new RuntimeException(
               "whoops, better handle " + expr.getKind() + " " + state.getSourceForNode(expr));
         }
     }
-    exprMayBeNull = handler.onOverrideMayBeNullExpr(this, expr, state, exprMayBeNull);
-    return exprMayBeNull;
+    exprMayBeNull = handler.onOverrideMayBeNullExpr(this, expr, exprSymbol, state, exprMayBeNull);
+    return exprMayBeNull && nullnessFromDataflow(state, expr);
   }
 
-  private boolean mayBeNullMethodCall(
-      VisitorState state, ExpressionTree expr, Symbol.MethodSymbol exprSymbol) {
-    boolean exprMayBeNull = true;
+  private boolean mayBeNullMethodCall(Symbol.MethodSymbol exprSymbol) {
     if (codeAnnotationInfo.isSymbolUnannotated(exprSymbol, config)) {
-      exprMayBeNull = false;
+      return false;
     }
-    if (!Nullness.hasNullableAnnotation(exprSymbol, config)) {
-      exprMayBeNull = false;
-    }
-    exprMayBeNull = handler.onOverrideMayBeNullExpr(this, expr, state, exprMayBeNull);
-    return exprMayBeNull ? nullnessFromDataflow(state, expr) : false;
+    return Nullness.hasNullableAnnotation(exprSymbol, config);
   }
 
   public boolean nullnessFromDataflow(VisitorState state, ExpressionTree expr) {
@@ -2318,15 +2321,6 @@ public class NullAway extends BugChecker
 
   public AccessPathNullnessAnalysis getNullnessAnalysis(VisitorState state) {
     return AccessPathNullnessAnalysis.instance(state, nonAnnotatedMethod, config, this.handler);
-  }
-
-  private boolean mayBeNullFieldAccess(VisitorState state, ExpressionTree expr, Symbol exprSymbol) {
-    boolean exprMayBeNull = true;
-    if (!NullabilityUtil.mayBeNullFieldFromType(exprSymbol, config, codeAnnotationInfo)) {
-      exprMayBeNull = false;
-    }
-    exprMayBeNull = handler.onOverrideMayBeNullExpr(this, expr, state, exprMayBeNull);
-    return exprMayBeNull ? nullnessFromDataflow(state, expr) : false;
   }
 
   private Description matchDereference(
