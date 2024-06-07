@@ -129,6 +129,14 @@ public interface Config {
   boolean isCustomNonnullAnnotation(String annotationName);
 
   /**
+   * Checks if the annotation is a custom @NullUnmarked annotation.
+   *
+   * @param annotationName fully-qualified annotation name
+   * @return true if annotation should be considered as a custom @NullUnmarked annotation.
+   */
+  boolean isCustomNullUnmarkedAnnotation(String annotationName);
+
+  /**
    * Checks if the annotation is an excluded field annotation.
    *
    * @param annotationName fully-qualified annotation name

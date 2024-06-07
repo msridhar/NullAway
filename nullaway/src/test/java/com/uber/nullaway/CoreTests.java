@@ -505,6 +505,40 @@ public class CoreTests extends NullAwayTestsBase {
   }
 
   @Test
+  public void testCustomNullUnmarkedAnnotation() {
+    makeTestHelperWithArgs(
+            Arrays.asList(
+                "-d",
+                temporaryFolder.getRoot().getAbsolutePath(),
+                "-XepOpt:NullAway:AnnotatedPackages=com.uber",
+                "-XepOpt:NullAway:CustomNullUnmarkedAnnotations=qual.NotMarked"))
+        .addSourceLines(
+            "qual/NotMarked.java", "package qual;", "public @interface NotMarked {", "}")
+        .addSourceLines(
+            "Other.java",
+            "package com.uber;",
+            "import qual.NotMarked;",
+            "@NotMarked",
+            "public class Other {",
+            "  void bar(Object item) {",
+            "    // no error since treated as unmarked",
+            "    Object x = null; x.hashCode();",
+            "  }",
+            "}")
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "class Test {",
+            "   Other other = new Other();",
+            "   void foo(){",
+            "     // no error since treated as unmarked",
+            "     other.bar(null);",
+            "   }",
+            "}")
+        .doTest();
+  }
+
+  @Test
   public void testMapGetChainWithCast() {
     defaultCompilationHelper
         .addSourceLines(

@@ -67,6 +67,7 @@ final class ErrorProneCLIFlagsConfig implements Config {
   static final String FL_INITIALIZER_ANNOT = EP_FL_NAMESPACE + ":CustomInitializerAnnotations";
   static final String FL_NULLABLE_ANNOT = EP_FL_NAMESPACE + ":CustomNullableAnnotations";
   static final String FL_NONNULL_ANNOT = EP_FL_NAMESPACE + ":CustomNonnullAnnotations";
+  static final String FL_NULLUNMARKED_ANNOT = EP_FL_NAMESPACE + ":CustomNullUnmarkedAnnotations";
   static final String FL_CTNN_METHOD = EP_FL_NAMESPACE + ":CastToNonNullMethod";
   static final String FL_EXTERNAL_INIT_ANNOT = EP_FL_NAMESPACE + ":ExternalInitAnnotations";
   static final String FL_CONTRACT_ANNOT = EP_FL_NAMESPACE + ":CustomContractAnnotations";
@@ -232,6 +233,8 @@ final class ErrorProneCLIFlagsConfig implements Config {
 
   private final ImmutableSet<String> customNullableAnnotations;
 
+  private final ImmutableSet<String> customNullUnmarkedAnnotations;
+
   /**
    * If active, NullAway will write all reporting errors in output directory. The output directory
    * along with the activation status of other serialization features are stored in {@link
@@ -270,6 +273,8 @@ final class ErrorProneCLIFlagsConfig implements Config {
         getFlagStringSet(flags, FL_INITIALIZER_ANNOT, DEFAULT_INITIALIZER_ANNOT);
     customNullableAnnotations = getFlagStringSet(flags, FL_NULLABLE_ANNOT, ImmutableSet.of());
     customNonnullAnnotations = getFlagStringSet(flags, FL_NONNULL_ANNOT, ImmutableSet.of());
+    customNullUnmarkedAnnotations =
+        getFlagStringSet(flags, FL_NULLUNMARKED_ANNOT, ImmutableSet.of());
     externalInitAnnotations =
         getFlagStringSet(flags, FL_EXTERNAL_INIT_ANNOT, DEFAULT_EXTERNAL_INIT_ANNOT);
     contractAnnotations = getFlagStringSet(flags, FL_CONTRACT_ANNOT, DEFAULT_CONTRACT_ANNOT);
@@ -454,6 +459,11 @@ final class ErrorProneCLIFlagsConfig implements Config {
   @Override
   public boolean isCustomNonnullAnnotation(String annotationName) {
     return customNonnullAnnotations.contains(annotationName);
+  }
+
+  @Override
+  public boolean isCustomNullUnmarkedAnnotation(String annotationName) {
+    return customNullUnmarkedAnnotations.contains(annotationName);
   }
 
   @Override

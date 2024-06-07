@@ -140,6 +140,11 @@ public class DummyOptionsConfig implements Config {
   }
 
   @Override
+  public boolean isCustomNullUnmarkedAnnotation(String annotationName) {
+    throw new IllegalStateException(ERROR_MESSAGE);
+  }
+
+  @Override
   public boolean suggestSuppressions() {
     throw new IllegalStateException(ERROR_MESSAGE);
   }
