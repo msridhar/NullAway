@@ -594,8 +594,7 @@ public class NullAway extends BugChecker
     Symbol.MethodSymbol methodSymbol = ASTHelpers.getSymbol(tree);
     switch (nullMarkingForTopLevelClass) {
       case FULLY_MARKED:
-        if (hasDirectAnnotationWithSimpleName(
-            methodSymbol, NullabilityUtil.NULLUNMARKED_SIMPLE_NAME)) {
+        if (CodeAnnotationInfo.hasNullUnmarkedAnnotation(methodSymbol, config)) {
           nullMarkingForTopLevelClass = NullMarking.PARTIALLY_MARKED;
         }
         break;
@@ -607,8 +606,7 @@ public class NullAway extends BugChecker
         }
         break;
       case PARTIALLY_MARKED:
-        if (hasDirectAnnotationWithSimpleName(
-            methodSymbol, NullabilityUtil.NULLMARKED_SIMPLE_NAME)) {
+        if (CodeAnnotationInfo.hasNullUnmarkedAnnotation(methodSymbol, config)) {
           // We still care here if this is a transition between @NullUnmarked and @NullMarked code,
           // within partially marked code, see checks below for markedMethodInUnmarkedContext.
           if (!codeAnnotationInfo.isClassNullAnnotated(methodSymbol.enclClass(), config, handler)) {
@@ -1500,8 +1498,7 @@ public class NullAway extends BugChecker
             && hasDirectAnnotationWithSimpleName(
                 classSymbol, NullabilityUtil.NULLMARKED_SIMPLE_NAME))
         || (nullMarkingForTopLevelClass == NullMarking.FULLY_MARKED
-            && hasDirectAnnotationWithSimpleName(
-                classSymbol, NullabilityUtil.NULLUNMARKED_SIMPLE_NAME));
+            && CodeAnnotationInfo.hasNullUnmarkedAnnotation(classSymbol, config));
   }
 
   @Override

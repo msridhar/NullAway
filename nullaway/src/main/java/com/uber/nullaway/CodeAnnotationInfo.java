@@ -91,9 +91,7 @@ public final class CodeAnnotationInfo {
       return false;
     }
     if (config.fromExplicitlyUnannotatedPackage(className)
-        || (enclosingPackage != null
-            && hasDirectAnnotationWithSimpleName(
-                enclosingPackage, NullabilityUtil.NULLUNMARKED_SIMPLE_NAME))) {
+        || (enclosingPackage != null && hasNullUnmarkedAnnotation(enclosingPackage, config))) {
       // Any code explicitly marked as unannotated in our configuration is unannotated, no matter
       // what. Similarly, any package annotated as @NullUnmarked is unannotated, even if
       // explicitly passed to -XepOpt:NullAway::AnnotatedPackages
@@ -102,6 +100,13 @@ public final class CodeAnnotationInfo {
     // Finally, if we are here, the code was marked as annotated (either by configuration or
     // @NullMarked) and nothing overrides it.
     return true;
+  }
+
+  public static boolean hasNullUnmarkedAnnotation(Symbol symbol, Config config) {
+    return hasDirectAnnotationWithSimpleName(symbol, NullabilityUtil.NULLUNMARKED_SIMPLE_NAME)
+        || NullabilityUtil.getAllAnnotations(symbol, config)
+            .map(anno -> anno.getAnnotationType().toString())
+            .anyMatch(config::isCustomNullUnmarkedAnnotation);
   }
 
   /**
@@ -169,7 +174,7 @@ public final class CodeAnnotationInfo {
     boolean inAnnotatedClass = classCacheRecord.isNullnessAnnotated;
     if (symbol.getKind().equals(ElementKind.METHOD)
         || symbol.getKind().equals(ElementKind.CONSTRUCTOR)) {
-      return !classCacheRecord.isMethodNullnessAnnotated((Symbol.MethodSymbol) symbol);
+      return !classCacheRecord.isMethodNullnessAnnotated((Symbol.MethodSymbol) symbol, config);
     } else {
       return !inAnnotatedClass;
     }
@@ -224,10 +229,9 @@ public final class CodeAnnotationInfo {
         // Check if this class is annotated, recall that enclosed scopes override enclosing scopes
         boolean isAnnotated = recordForEnclosing.isNullnessAnnotated;
         if (enclosingMethod != null) {
-          isAnnotated = recordForEnclosing.isMethodNullnessAnnotated(enclosingMethod);
+          isAnnotated = recordForEnclosing.isMethodNullnessAnnotated(enclosingMethod, config);
         }
-        if (hasDirectAnnotationWithSimpleName(
-            classSymbol, NullabilityUtil.NULLUNMARKED_SIMPLE_NAME)) {
+        if (hasNullUnmarkedAnnotation(classSymbol, config)) {
           isAnnotated = false;
         } else if (hasDirectAnnotationWithSimpleName(
             classSymbol, NullabilityUtil.NULLMARKED_SIMPLE_NAME)) {
@@ -280,7 +284,7 @@ public final class CodeAnnotationInfo {
   private boolean isAnnotatedTopLevelClass(
       Symbol.ClassSymbol classSymbol, Config config, @Nullable Handler handler) {
     // First, check for an explicitly @NullUnmarked top level class
-    if (hasDirectAnnotationWithSimpleName(classSymbol, NullabilityUtil.NULLUNMARKED_SIMPLE_NAME)) {
+    if (hasNullUnmarkedAnnotation(classSymbol, config)) {
       return false;
     }
     // Then, check if the class has a @NullMarked annotation or comes from an annotated package
@@ -315,11 +319,11 @@ public final class CodeAnnotationInfo {
       this.methodNullnessCache = new HashMap<>();
     }
 
-    public boolean isMethodNullnessAnnotated(Symbol.MethodSymbol methodSymbol) {
+    public boolean isMethodNullnessAnnotated(Symbol.MethodSymbol methodSymbol, Config config) {
       return methodNullnessCache.computeIfAbsent(
           methodSymbol,
           m -> {
-            if (hasDirectAnnotationWithSimpleName(m, NullabilityUtil.NULLUNMARKED_SIMPLE_NAME)) {
+            if (hasNullUnmarkedAnnotation(methodSymbol, config)) {
               return false;
             } else if (this.isNullnessAnnotated) {
               return true;
