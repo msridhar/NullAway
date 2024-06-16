@@ -123,7 +123,7 @@ public final class CodeAnnotationInfo {
       return false;
     }
     Symbol.ClassSymbol outermostClassSymbol = get(classSymbol, config, null).outermostClassSymbol;
-    return hasDirectAnnotationWithSimpleName(outermostClassSymbol, "Generated");
+    return hasGeneratedCodeAnnotation(outermostClassSymbol, config);
   }
 
   /**
@@ -251,21 +251,24 @@ public final class CodeAnnotationInfo {
   private boolean shouldTreatAsUnannotated(Symbol.ClassSymbol classSymbol, Config config) {
     if (config.isUnannotatedClass(classSymbol)) {
       return true;
-    } else if (config.treatGeneratedAsUnannotated()) {
-      // Generated code is or isn't excluded, depending on configuration
-      // Note: In the future, we might want finer grain controls to distinguish code that is
-      // generated with nullability info and without.
-      if (hasDirectAnnotationWithSimpleName(classSymbol, "Generated")) {
-        return true;
-      }
-      ImmutableSet<String> generatedCodeAnnotations = config.getGeneratedCodeAnnotations();
-      if (classSymbol.getAnnotationMirrors().stream()
-          .map(anno -> anno.getAnnotationType().toString())
-          .anyMatch(generatedCodeAnnotations::contains)) {
-        return true;
-      }
     }
-    return false;
+    return hasGeneratedCodeAnnotation(classSymbol, config);
+  }
+
+  private static boolean hasGeneratedCodeAnnotation(Symbol.ClassSymbol classSymbol, Config config) {
+    if (config.treatGeneratedAsUnannotated()
+        && hasDirectAnnotationWithSimpleName(classSymbol, "Generated")) {
+      return true;
+    }
+    return hasCustomGeneratedCodeAnnotation(classSymbol, config);
+  }
+
+  private static boolean hasCustomGeneratedCodeAnnotation(
+      Symbol.ClassSymbol classSymbol, Config config) {
+    ImmutableSet<String> generatedCodeAnnotations = config.getGeneratedCodeAnnotations();
+    return classSymbol.getAnnotationMirrors().stream()
+        .map(anno -> anno.getAnnotationType().toString())
+        .anyMatch(generatedCodeAnnotations::contains);
   }
 
   /**
