@@ -260,11 +260,6 @@ public final class CodeAnnotationInfo {
         && hasDirectAnnotationWithSimpleName(classSymbol, "Generated")) {
       return true;
     }
-    return hasCustomGeneratedCodeAnnotation(classSymbol, config);
-  }
-
-  private static boolean hasCustomGeneratedCodeAnnotation(
-      Symbol.ClassSymbol classSymbol, Config config) {
     ImmutableSet<String> generatedCodeAnnotations = config.getGeneratedCodeAnnotations();
     return classSymbol.getAnnotationMirrors().stream()
         .map(anno -> anno.getAnnotationType().toString())
