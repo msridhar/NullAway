@@ -71,7 +71,7 @@ public class RestrictiveAnnotationHandler implements Handler {
     return (codeAnnotationInfo.isSymbolUnannotated(symbol, config, mainHandler)
         // with the generated-as-unannotated option enabled, we want to ignore annotations in
         // generated code no matter what
-        && !(config.treatGeneratedAsUnannotated() && codeAnnotationInfo.isGenerated(symbol, config))
+        && !codeAnnotationInfo.isGenerated(symbol, config)
         && Nullness.hasNullableAnnotation(symbol, config));
   }
 
