@@ -261,9 +261,10 @@ public final class CodeAnnotationInfo {
       return true;
     }
     ImmutableSet<String> generatedCodeAnnotations = config.getGeneratedCodeAnnotations();
-    return classSymbol.getAnnotationMirrors().stream()
-        .map(anno -> anno.getAnnotationType().toString())
-        .anyMatch(generatedCodeAnnotations::contains);
+    return !generatedCodeAnnotations.isEmpty()
+        && classSymbol.getAnnotationMirrors().stream()
+            .map(anno -> anno.getAnnotationType().toString())
+            .anyMatch(generatedCodeAnnotations::contains);
   }
 
   /**
