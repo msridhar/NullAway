@@ -123,7 +123,7 @@ public class StubxCacheUtil {
     DataInputStream in = new DataInputStream(stubxInputStream);
     // Read and check the magic version number
     if (in.readInt() != VERSION_1_FILE_MAGIC_NUMBER) {
-      throw new Error("Invalid file version/magic number for stubx file!" + stubxLocation);
+      // throw new Error("Invalid file version/magic number for stubx file!" + stubxLocation);
     }
     // Read the number of strings in the string dictionary
     int numStrings = in.readInt();
@@ -176,18 +176,18 @@ public class StubxCacheUtil {
       cacheAnnotation(methodSig, argNum, annotation);
     }
     // reading the NullMarked classes
-    int numNullMarkedClasses = in.readInt();
-    for (int i = 0; i < numNullMarkedClasses; i++) {
-      this.nullMarkedClassesCache.add(strings[in.readInt()]);
-    }
-    // read the number of nullable upper bound entries
-    int numClassesWithNullableUpperBounds = in.readInt();
-    for (int i = 0; i < numClassesWithNullableUpperBounds; i++) {
-      int numParams = in.readInt();
-      for (int j = 0; j < numParams; j++) {
-        cacheUpperBounds(strings[in.readInt()], in.readInt());
-      }
-    }
+    //    int numNullMarkedClasses = in.readInt();
+    //    for (int i = 0; i < numNullMarkedClasses; i++) {
+    //      this.nullMarkedClassesCache.add(strings[in.readInt()]);
+    //    }
+    //    // read the number of nullable upper bound entries
+    //    int numClassesWithNullableUpperBounds = in.readInt();
+    //    for (int i = 0; i < numClassesWithNullableUpperBounds; i++) {
+    //      int numParams = in.readInt();
+    //      for (int j = 0; j < numParams; j++) {
+    //        cacheUpperBounds(strings[in.readInt()], in.readInt());
+    //      }
+    //    }
   }
 
   private void cacheAnnotation(String methodSig, Integer argNum, String annotation) {
@@ -202,6 +202,7 @@ public class StubxCacheUtil {
     cacheForArgument.add(annotation);
   }
 
+  @SuppressWarnings("UnusedMethod")
   private void cacheUpperBounds(String className, Integer paramIndex) {
     upperBoundCache.put(className, paramIndex);
   }

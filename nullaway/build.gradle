@@ -33,6 +33,7 @@ dependencies {
     annotationProcessor deps.apt.autoService
     // Using api following the guidance at https://jspecify.dev/docs/using#gradle
     api deps.build.jspecify
+    api deps.build.wala
     compileOnly deps.test.jetbrainsAnnotations
     compileOnly deps.apt.javaxInject
 
