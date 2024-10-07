@@ -34,6 +34,7 @@ dependencies {
     // Using api following the guidance at https://jspecify.dev/docs/using#gradle
     api deps.build.jspecify
     api deps.build.wala
+    api project(":library-model:library-model-generator")
     compileOnly deps.test.jetbrainsAnnotations
     compileOnly deps.apt.javaxInject
 
