@@ -35,6 +35,7 @@ dependencies {
     api deps.build.jspecify
     api deps.build.wala
     api project(":library-model:library-model-generator")
+    api project(":jar-infer:jar-infer-lib")
     compileOnly deps.test.jetbrainsAnnotations
     compileOnly deps.apt.javaxInject
 

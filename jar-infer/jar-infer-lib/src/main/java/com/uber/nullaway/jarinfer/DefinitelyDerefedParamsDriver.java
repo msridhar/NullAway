@@ -500,7 +500,7 @@ public class DefinitelyDerefedParamsDriver {
    * @return String Method signature.
    */
   // TODO: handle generics and inner classes
-  private static String getAstubxSignature(IMethod mtd) {
+  public static String getAstubxSignature(IMethod mtd) {
     String classType =
         mtd.getDeclaringClass().getName().toString().replaceAll("/", "\\.").substring(1);
     classType = classType.replaceAll("\\$", "\\."); // handle inner class
