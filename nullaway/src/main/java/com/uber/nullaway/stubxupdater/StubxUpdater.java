@@ -15,6 +15,7 @@ import com.ibm.wala.types.ClassLoaderReference;
 import com.ibm.wala.types.TypeReference;
 import com.ibm.wala.util.config.FileOfClasses;
 import com.uber.nullaway.handlers.StubxCacheUtil;
+import com.uber.nullaway.jarinfer.DefinitelyDerefedParamsDriver;
 import com.uber.nullaway.libmodel.MethodAnnotationsRecord;
 import com.uber.nullaway.libmodel.StubxWriter;
 import java.io.ByteArrayInputStream;
@@ -76,11 +77,17 @@ public class StubxUpdater {
       for (String methodSig : recordsForClass.keySet()) {
         Map<Integer, Set<String>> annots = recordsForClass.get(methodSig);
         String newMethodSig = convertMethodSig(methodSig, klass);
+        if (newMethodSig == null) {
+          continue;
+        }
         Set<String> methodAnnots = new HashSet<>();
         Map<Integer, ImmutableSet<String>> resultArgAnnots = new LinkedHashMap<>();
         for (Map.Entry<Integer, Set<String>> entry : annots.entrySet()) {
           Integer argNum = entry.getKey();
-          Set<String> argAnnots = entry.getValue();
+          ImmutableSet<String> argAnnots =
+              entry.getValue().stream()
+                  .map(StubxUpdater::qualifiedNameToSimpleName)
+                  .collect(ImmutableSet.toImmutableSet());
           if (argNum == -1) { // return
             methodAnnots.addAll(argAnnots);
           } else {
@@ -114,7 +121,7 @@ public class StubxUpdater {
     //        parser.parseStubx(stubxPath, outputPath);
   }
 
-  private static String convertMethodSig(String input, IClass klass) {
+  private static @Nullable String convertMethodSig(String input, IClass klass) {
     // Split into enclosing class and method part
     String[] parts = input.split(":");
     if (parts.length != 2) {
@@ -147,11 +154,11 @@ public class StubxUpdater {
       arguments.add(argument.trim());
     }
     IMethod resolvedMethod = resolveMethod(klass, methodName, arguments);
-    return convertIMethodToMethodSig(resolvedMethod);
+    return resolvedMethod == null ? null : convertIMethodToMethodSig(resolvedMethod);
   }
 
-  private static String convertIMethodToMethodSig(IMethod unused) {
-    return null;
+  private static String convertIMethodToMethodSig(IMethod method) {
+    return DefinitelyDerefedParamsDriver.getAstubxSignature(method);
   }
 
   private static @Nullable IMethod resolveMethod(
@@ -176,8 +183,7 @@ public class StubxUpdater {
             String parameterTypeName =
                 StringStuff.jvmToReadableType(parameterType.getName().toString());
             if (!parameterType.isPrimitiveType()) {
-              parameterTypeName =
-                  parameterTypeName.substring(parameterTypeName.lastIndexOf('.') + 1);
+              parameterTypeName = qualifiedNameToSimpleName(parameterTypeName);
             }
             if (!parameterTypeName.equals(curArgTypeStr)) {
               match = false;
@@ -198,6 +204,10 @@ public class StubxUpdater {
             + ") in class "
             + klass.getName());
     return null;
+  }
+
+  private static String qualifiedNameToSimpleName(String parameterTypeName) {
+    return parameterTypeName.substring(parameterTypeName.lastIndexOf('.') + 1);
   }
 
   private static IClassHierarchy getCHAForAndroidJar(String androidJarPath)
