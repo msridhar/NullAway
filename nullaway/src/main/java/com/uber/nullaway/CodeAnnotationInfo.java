@@ -255,7 +255,10 @@ public final class CodeAnnotationInfo {
       // Generated code is or isn't excluded, depending on configuration
       // Note: In the future, we might want finer grain controls to distinguish code that is
       // generated with nullability info and without.
-      if (hasDirectAnnotationWithSimpleName(classSymbol, "Generated")) {
+      if (hasDirectAnnotationWithSimpleName(classSymbol, "Generated")
+          && !classSymbol.getAnnotationMirrors().stream()
+              .map(anno -> anno.getAnnotationType().toString())
+              .anyMatch(s -> s.equals("lombok.Generated"))) {
         return true;
       }
       ImmutableSet<String> generatedCodeAnnotations = config.getGeneratedCodeAnnotations();
