@@ -15,7 +15,6 @@ import com.ibm.wala.types.ClassLoaderReference;
 import com.ibm.wala.types.TypeReference;
 import com.ibm.wala.util.config.FileOfClasses;
 import com.uber.nullaway.handlers.StubxCacheUtil;
-import com.uber.nullaway.jarinfer.DefinitelyDerefedParamsDriver;
 import com.uber.nullaway.libmodel.MethodAnnotationsRecord;
 import com.uber.nullaway.libmodel.StubxWriter;
 import java.io.ByteArrayInputStream;
@@ -76,10 +75,7 @@ public class StubxUpdater {
       Map<String, Map<Integer, Set<String>>> recordsForClass = argAnnotCache.get(className);
       for (String methodSig : recordsForClass.keySet()) {
         Map<Integer, Set<String>> annots = recordsForClass.get(methodSig);
-        String newMethodSig = convertMethodSig(methodSig, klass);
-        if (newMethodSig == null) {
-          continue;
-        }
+        boolean isStaticMethod = isStaticMethod(methodSig, klass);
         Set<String> methodAnnots = new HashSet<>();
         Map<Integer, ImmutableSet<String>> resultArgAnnots = new LinkedHashMap<>();
         for (Map.Entry<Integer, Set<String>> entry : annots.entrySet()) {
@@ -91,13 +87,16 @@ public class StubxUpdater {
           if (argNum == -1) { // return
             methodAnnots.addAll(argAnnots);
           } else {
+            if (!isStaticMethod) {
+              argNum--;
+            }
             resultArgAnnots.put(argNum, ImmutableSet.copyOf(argAnnots));
           }
         }
         MethodAnnotationsRecord record =
             MethodAnnotationsRecord.create(
                 ImmutableSet.copyOf(methodAnnots), ImmutableMap.copyOf(resultArgAnnots));
-        methodRecords.put(newMethodSig, record);
+        methodRecords.put(methodSig, record);
       }
     }
     ImmutableMap<String, String> importedAnnotations =
@@ -121,7 +120,7 @@ public class StubxUpdater {
     //        parser.parseStubx(stubxPath, outputPath);
   }
 
-  private static @Nullable String convertMethodSig(String input, IClass klass) {
+  private static boolean isStaticMethod(String input, IClass klass) {
     // Split into enclosing class and method part
     String[] parts = input.split(":");
     if (parts.length != 2) {
@@ -154,12 +153,12 @@ public class StubxUpdater {
       arguments.add(argument.trim());
     }
     IMethod resolvedMethod = resolveMethod(klass, methodName, arguments);
-    return resolvedMethod == null ? null : convertIMethodToMethodSig(resolvedMethod);
+    return resolvedMethod.isStatic();
   }
 
-  private static String convertIMethodToMethodSig(IMethod method) {
-    return DefinitelyDerefedParamsDriver.getAstubxSignature(method);
-  }
+  //  private static String convertIMethodToMethodSig(IMethod method) {
+  //    return DefinitelyDerefedParamsDriver.getAstubxSignature(method);
+  //  }
 
   private static @Nullable IMethod resolveMethod(
       IClass klass, String methodName, List<String> argumentTypes) {
@@ -181,10 +180,10 @@ public class StubxUpdater {
               continue;
             }
             String parameterTypeName =
-                StringStuff.jvmToReadableType(parameterType.getName().toString());
-            if (!parameterType.isPrimitiveType()) {
-              parameterTypeName = qualifiedNameToSimpleName(parameterTypeName);
-            }
+                StringStuff.jvmToBinaryName(parameterType.getName().toString());
+            //            if (!parameterType.isPrimitiveType()) {
+            //              parameterTypeName = qualifiedNameToSimpleName(parameterTypeName);
+            //            }
             if (!parameterTypeName.equals(curArgTypeStr)) {
               match = false;
               break;
@@ -196,14 +195,13 @@ public class StubxUpdater {
         }
       }
     }
-    System.err.println(
+    throw new RuntimeException(
         "Method not found: "
             + methodName
             + "("
             + String.join(", ", argumentTypes)
             + ") in class "
             + klass.getName());
-    return null;
   }
 
   private static String qualifiedNameToSimpleName(String parameterTypeName) {
