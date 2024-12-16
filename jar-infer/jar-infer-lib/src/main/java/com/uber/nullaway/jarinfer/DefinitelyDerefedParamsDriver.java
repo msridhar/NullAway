@@ -508,7 +508,7 @@ public class DefinitelyDerefedParamsDriver {
    * @param mtd Method reference.
    * @return String Method signature.
    */
-  private static String getAstubxSignature(IMethod mtd) {
+  public static String getAstubxSignature(IMethod mtd) {
     Preconditions.checkArgument(
         mtd instanceof ShrikeCTMethod, "Method is not a ShrikeCTMethod from bytecodes");
     String classType = getSourceLevelQualifiedTypeName(mtd.getDeclaringClass().getReference());

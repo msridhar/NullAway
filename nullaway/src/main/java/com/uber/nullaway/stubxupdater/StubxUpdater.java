@@ -15,6 +15,7 @@ import com.ibm.wala.types.ClassLoaderReference;
 import com.ibm.wala.types.TypeReference;
 import com.ibm.wala.util.config.FileOfClasses;
 import com.uber.nullaway.handlers.StubxCacheUtil;
+import com.uber.nullaway.jarinfer.DefinitelyDerefedParamsDriver;
 import com.uber.nullaway.libmodel.MethodAnnotationsRecord;
 import com.uber.nullaway.libmodel.StubxWriter;
 import java.io.ByteArrayInputStream;
@@ -75,7 +76,9 @@ public class StubxUpdater {
       Map<String, Map<Integer, Set<String>>> recordsForClass = argAnnotCache.get(className);
       for (String methodSig : recordsForClass.keySet()) {
         Map<Integer, Set<String>> annots = recordsForClass.get(methodSig);
-        boolean isStaticMethod = isStaticMethod(methodSig, klass);
+        IMethod method = getIMethod(methodSig, klass);
+        boolean isStaticMethod = method.isStatic();
+        String newMethodSig = convertIMethodToMethodSig(method);
         Set<String> methodAnnots = new HashSet<>();
         Map<Integer, ImmutableSet<String>> resultArgAnnots = new LinkedHashMap<>();
         for (Map.Entry<Integer, Set<String>> entry : annots.entrySet()) {
@@ -88,6 +91,7 @@ public class StubxUpdater {
             methodAnnots.addAll(argAnnots);
           } else {
             if (!isStaticMethod) {
+              // to ignore the receiver argument
               argNum--;
             }
             resultArgAnnots.put(argNum, ImmutableSet.copyOf(argAnnots));
@@ -96,7 +100,7 @@ public class StubxUpdater {
         MethodAnnotationsRecord record =
             MethodAnnotationsRecord.create(
                 ImmutableSet.copyOf(methodAnnots), ImmutableMap.copyOf(resultArgAnnots));
-        methodRecords.put(methodSig, record);
+        methodRecords.put(newMethodSig, record);
       }
     }
     ImmutableMap<String, String> importedAnnotations =
@@ -120,7 +124,7 @@ public class StubxUpdater {
     //        parser.parseStubx(stubxPath, outputPath);
   }
 
-  private static boolean isStaticMethod(String input, IClass klass) {
+  private static @Nullable IMethod getIMethod(String input, IClass klass) {
     // Split into enclosing class and method part
     String[] parts = input.split(":");
     if (parts.length != 2) {
@@ -153,12 +157,12 @@ public class StubxUpdater {
       arguments.add(argument.trim());
     }
     IMethod resolvedMethod = resolveMethod(klass, methodName, arguments);
-    return resolvedMethod.isStatic();
+    return resolvedMethod;
   }
 
-  //  private static String convertIMethodToMethodSig(IMethod method) {
-  //    return DefinitelyDerefedParamsDriver.getAstubxSignature(method);
-  //  }
+  private static String convertIMethodToMethodSig(IMethod method) {
+    return DefinitelyDerefedParamsDriver.getAstubxSignature(method);
+  }
 
   private static @Nullable IMethod resolveMethod(
       IClass klass, String methodName, List<String> argumentTypes) {
@@ -214,10 +218,7 @@ public class StubxUpdater {
     scope.setExclusions(
         new FileOfClasses(
             new ByteArrayInputStream(DEFAULT_EXCLUSIONS.getBytes(StandardCharsets.UTF_8))));
-    // JarInputStream jarIS = new JarInputStream(new FileInputStream(androidJarPath));
     scope.addToScope(ClassLoaderReference.Application, new JarFile(androidJarPath));
-    //    AnalysisOptions options = new AnalysisOptions(scope, null);
-    //    AnalysisCache cache = new AnalysisCacheImpl();
     IClassHierarchy cha = ClassHierarchyFactory.makeWithRoot(scope);
     Warnings.clear();
     return cha;
