@@ -1,5 +1,7 @@
 package com.uber.nullaway.stubxupdater;
 
+import static com.google.common.collect.ImmutableSet.toImmutableSet;
+
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.ibm.wala.classLoader.IClass;
@@ -86,7 +88,7 @@ public class StubxUpdater {
           ImmutableSet<String> argAnnots =
               entry.getValue().stream()
                   .map(StubxUpdater::qualifiedNameToSimpleName)
-                  .collect(ImmutableSet.toImmutableSet());
+                  .collect(toImmutableSet());
           if (argNum == -1) { // return
             methodAnnots.addAll(argAnnots);
           } else {
@@ -94,7 +96,7 @@ public class StubxUpdater {
               // to ignore the receiver argument
               argNum--;
             }
-            resultArgAnnots.put(argNum, ImmutableSet.copyOf(argAnnots));
+            resultArgAnnots.put(argNum, argAnnots);
           }
         }
         MethodAnnotationsRecord record =
