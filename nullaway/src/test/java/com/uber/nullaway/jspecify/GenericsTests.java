@@ -2027,6 +2027,48 @@ public class GenericsTests extends NullAwayTestsBase {
         .doTest();
   }
 
+  @Test
+  public void issue1093() {
+    makeHelper()
+        .addSourceLines(
+            "Main.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "public class Main {",
+            "    interface CacheLoader<V extends @Nullable Object> {",
+            "    }",
+            "    enum Loader implements CacheLoader<@Nullable Integer> {",
+            "        NULL;",
+            "        Loader() {}",
+            "    }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void nullUnmarkedGenericField() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.unannotated;",
+            "import org.jspecify.annotations.*;",
+            "import java.util.function.Function;",
+            "public class Test {",
+            "  static Function<@Nullable String, @Nullable String> foo;",
+            "  @NullMarked",
+            "  static class Inner {",
+            "    static @Nullable Function<@Nullable String, @Nullable String> bar;",
+            "    void bar(Function<String,String> f) {",
+            "      // no error since foo is in @NullUnmarked code",
+            "      foo = f;",
+            "      // BUG: Diagnostic contains: Cannot assign from type Function<String, String>",
+            "      bar = f;",
+            "    }",
+            "  }",
+            "}")
+        .doTest();
+  }
+
   private CompilationTestHelper makeHelper() {
     return makeTestHelperWithArgs(
         Arrays.asList(
