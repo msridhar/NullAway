@@ -134,6 +134,7 @@ public final class CodeAnnotationInfo {
    * @param symbol symbol for entity
    * @return true iff this symbol represents t.class for a primitive type t.
    */
+  @SuppressWarnings("ASTHelpersSuggestions")
   private static boolean isClassFieldOfPrimitiveType(Symbol symbol) {
     return symbol.name.contentEquals("class")
         && symbol.owner != null

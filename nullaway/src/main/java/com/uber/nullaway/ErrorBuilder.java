@@ -39,6 +39,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import com.google.errorprone.SuppressionInfo;
 import com.google.errorprone.VisitorState;
 import com.google.errorprone.fixes.SuggestedFix;
 import com.google.errorprone.matchers.Description;
@@ -132,6 +133,14 @@ public class ErrorBuilder {
     // Mildly expensive state.getPath() traversal, occurs only once per potentially
     // reported error.
     if (hasPathSuppression(state.getPath(), checkName)) {
+      SuppressionInfo.SuppressedState suppressedState = state.getSuppressedState();
+      if (suppressedState.isSuppressed()) {
+        // TODO this may erroneously mark an outer @SuppressWarnings("NullAway") as used, if there
+        //  is a nested @SuppressWarnings("NullAway.Init") that actually suppressed the warning.
+        //  Eventually we should properly handle "NullAway.Init" and "NullAway.Optional"
+        //  suppressions
+        ((SuppressionInfo.Suppressed) suppressedState).setAsUsed();
+      }
       return Description.NO_MATCH;
     }
 
@@ -500,6 +509,8 @@ public class ErrorBuilder {
     // checking happens at the class-level (meaning state.getPath() might not include the
     // field itself).
     if (symbolHasSuppressWarningsAnnotation(symbol, INITIALIZATION_CHECK_NAME)) {
+      // TODO need to mark the suppression as "used" for the purposees of warning on unused
+      // suppressions
       return;
     }
     Tree tree = getTreesInstance(state).getTree(symbol);

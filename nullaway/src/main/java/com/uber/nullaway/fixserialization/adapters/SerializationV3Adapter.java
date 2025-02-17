@@ -88,6 +88,7 @@ public class SerializationV3Adapter implements SerializationAdapter {
   }
 
   @Override
+  @SuppressWarnings("ASTHelpersSuggestions")
   public String serializeMethodSignature(Symbol.MethodSymbol methodSymbol) {
     StringBuilder sb = new StringBuilder();
     if (methodSymbol.isConstructor()) {

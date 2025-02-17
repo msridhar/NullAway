@@ -49,6 +49,7 @@ import com.google.common.collect.SetMultimap;
 import com.google.common.collect.Sets;
 import com.google.errorprone.BugPattern;
 import com.google.errorprone.ErrorProneFlags;
+import com.google.errorprone.SuppressionInfo;
 import com.google.errorprone.VisitorState;
 import com.google.errorprone.bugpatterns.BugChecker;
 import com.google.errorprone.matchers.Description;
@@ -200,6 +201,7 @@ public class NullAway extends BugChecker
       ImmutableSet.of(TYPE_USE, TYPE_PARAMETER);
 
   private final Predicate<MethodInvocationNode> nonAnnotatedMethod;
+  private final Set<Symbol> fieldsWithUsedSuppressions = new LinkedHashSet<>();
 
   /**
    * Possible levels of null-marking / annotatedness for a class. This may be set to FULLY_MARKED or
@@ -360,6 +362,11 @@ public class NullAway extends BugChecker
   public String linkUrl() {
     // add a space to make it clickable from iTerm
     return config.getErrorURL() + " ";
+  }
+
+  @Override
+  public boolean supportsUnneededSuppressionWarnings() {
+    return true;
   }
 
   /**
@@ -1506,6 +1513,9 @@ public class NullAway extends BugChecker
       return Description.NO_MATCH;
     }
     VarSymbol symbol = ASTHelpers.getSymbol(tree);
+    if (fieldsWithUsedSuppressions.contains(symbol)) {
+      ((SuppressionInfo.Suppressed) state.getSuppressedState()).setAsUsed();
+    }
     if (tree.getInitializer() != null && config.isJSpecifyMode()) {
       genericsChecks.checkTypeParameterNullnessForAssignability(tree, this, state);
     }
@@ -1676,6 +1686,7 @@ public class NullAway extends BugChecker
       class2ConstructorUninit.clear();
       computedNullnessMap.clear();
       genericsChecks.clearCache();
+      fieldsWithUsedSuppressions.clear();
       EnclosingEnvironmentNullness.instance(state.context).clear();
     } else if (classAnnotationIntroducesPartialMarking(classSymbol)) {
       // Handle the case where the top-class is unannotated, but there is a @NullMarked annotation
@@ -2092,6 +2103,7 @@ public class NullAway extends BugChecker
     for (Symbol uninitField : notInitializedAtAll) {
       if (errorBuilder.symbolHasSuppressWarningsAnnotation(
           uninitField, INITIALIZATION_CHECK_NAME)) {
+        fieldsWithUsedSuppressions.add(uninitField);
         continue;
       }
       if (singleInitializerMethod != null) {

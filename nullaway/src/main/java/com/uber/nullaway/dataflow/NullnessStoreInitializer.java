@@ -60,6 +60,7 @@ public abstract class NullnessStoreInitializer {
     return envStore;
   }
 
+  @SuppressWarnings("ASTHelpersSuggestions")
   private static @Nullable ClassTree findEnclosingLocalOrAnonymousClass(
       ClassTree classTree, Context context) {
     Symbol.ClassSymbol symbol = ASTHelpers.getSymbol(classTree);
