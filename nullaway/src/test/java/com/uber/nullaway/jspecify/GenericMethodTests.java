@@ -488,6 +488,293 @@ public class GenericMethodTests extends NullAwayTestsBase {
         .doTest();
   }
 
+  @Test
+  public void issue1176() {
+    makeHelper()
+        .addSourceLines(
+            "Foo.java",
+            "package com.uber;",
+            "import java.util.Set;",
+            "import java.util.concurrent.CompletableFuture;",
+            "import java.util.concurrent.ConcurrentHashMap;",
+            "class Foo {",
+            "    final Set<CompletableFuture<?>> f;",
+            "    public Foo() {",
+            "        f = ConcurrentHashMap.newKeySet();",
+            "    }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void issue1178() {
+    makeHelper()
+        .addSourceLines(
+            "SampleNullUnmarkedCall.java",
+            "import org.jspecify.annotations.*;",
+            "@NullMarked",
+            "class SampleNullUnmarkedCall {",
+            "  @NullUnmarked",
+            "  static class Foo<T> {",
+            "    Foo(T t) {}",
+            "    static <U> Foo<U> id(U u) { return new Foo<>(u); }",
+            "  }",
+            "  static void test() {",
+            "    Foo<@Nullable Object> x = Foo.id(null);",
+            "  }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void varargsOfGenericType() {
+    makeHelper()
+        .addSourceLines(
+            "Varargs.java",
+            "import org.jspecify.annotations.NullMarked;",
+            "import org.jspecify.annotations.Nullable;",
+            "@NullMarked",
+            "public class Varargs {",
+            "    static <T extends @Nullable Object> void foo(T... args) {",
+            "    }",
+            "    static void testNegative(@Nullable String s) {",
+            "        Varargs.<@Nullable String>foo(s);",
+            "    }",
+            "    static void testPositive(@Nullable String s) {",
+            "        // BUG: Diagnostic contains: passing @Nullable parameter",
+            "        Varargs.<String>foo(s);",
+            "    }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void nullableVarargsArray() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "import org.jspecify.annotations.Nullable;",
+            "import org.jspecify.annotations.NullMarked;",
+            "@NullMarked",
+            "class Test {",
+            "    <T extends Object> void varargsTest(T @Nullable... args) {}",
+            "    void f() {",
+            "        String[] x = null;",
+            "        this.<String>varargsTest(x);",
+            "        this.<String>varargsTest((String[])null);",
+            "    }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void varargsConstructor() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "import org.jspecify.annotations.Nullable;",
+            "import org.jspecify.annotations.NullMarked;",
+            "@NullMarked",
+            "class Test {",
+            "    static class Foo {",
+            "      <T> Foo(T @Nullable... args) {}",
+            "    }",
+            "    void testNegative() {",
+            "        String[] x = null;",
+            "        Foo f = new <String>Foo(x);",
+            "        f = new <String>Foo((String[])null);",
+            "    }",
+            "    static class Bar {",
+            "      <T> Bar(T... args) {}",
+            "    }",
+            "    void testPositive() {",
+            "        String[] x = null;",
+            "        // BUG: Diagnostic contains: passing @Nullable parameter",
+            "        Bar b = new <String>Bar(x);",
+            "        // BUG: Diagnostic contains: passing @Nullable parameter",
+            "        b = new <String>Bar((String[])null);",
+            "    }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void genericInferenceOnReturn() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "    class Test {",
+            "      static class Foo<T extends @Nullable Object> {",
+            "        Foo(T t) {}",
+            "        static <U extends @Nullable Object> Foo<U> makeNull(U u) {",
+            "          return new Foo<>(u);",
+            "        }",
+            "        static <U> Foo<U> makeNonNull(U u) {",
+            "          return new Foo<>(u);",
+            "        }",
+            "      }",
+            "      static Foo<@Nullable Object> makeNull() {",
+            "        // legal",
+            "        return Foo.makeNull(null);",
+            "      }",
+            "      static Foo<Object> makeNullInvalid() {",
+            "        // BUG: Diagnostic contains: passing @Nullable parameter 'null' where @NonNull is required",
+            "        return Foo.makeNull(null);",
+            "      }",
+            "      static Foo<@Nullable Object> makeNonNullInvalid() {",
+            "        // BUG: Diagnostic contains: passing @Nullable parameter 'null' where @NonNull is required",
+            "        return Foo.makeNonNull(null);",
+            "      }",
+            "      static Foo<@Nullable Object> makeNonNullInvalid2() {",
+            "        // BUG: Diagnostic contains: due to mismatched nullability of type parameters",
+            "        return Foo.makeNonNull(new Object());",
+            "      }",
+            "      static Foo<Object> makeNonNullValid() {",
+            "        return Foo.makeNonNull(new Object());",
+            "      }",
+            "    }")
+        .doTest();
+  }
+
+  @Test
+  public void genericInferenceOnParameterPassing() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "    class Test {",
+            "      static class Foo<T extends @Nullable Object> {",
+            "        Foo(T t) {}",
+            "        static <U extends @Nullable Object> Foo<U> makeNull(U u) {",
+            "          return new Foo<>(u);",
+            "        }",
+            "        static <U> Foo<U> makeNonNull(U u) {",
+            "          return new Foo<>(u);",
+            "        }",
+            "      }",
+            "      static void handleFooNullable(Foo<@Nullable Object> f) {}",
+            "      static void handleFooNonNull(Foo<Object> f) {}",
+            "      static void testCalls() {",
+            "        // legal",
+            "        handleFooNullable(Foo.makeNull(null));",
+            "        // BUG: Diagnostic contains: passing @Nullable parameter 'null' where @NonNull is required",
+            "        handleFooNonNull(Foo.makeNull(null));",
+            "        handleFooNullable(Foo.makeNull(new Object()));",
+            "        handleFooNonNull(Foo.makeNull(new Object()));",
+            "        // BUG: Diagnostic contains: passing @Nullable parameter 'null' where @NonNull is required",
+            "        handleFooNullable(Foo.makeNonNull(null));",
+            "        // BUG: Diagnostic contains: passing @Nullable parameter 'null' where @NonNull is required",
+            "        handleFooNonNull(Foo.makeNonNull(null));",
+            "        // BUG: Diagnostic contains: Cannot pass parameter of type Foo<Object>",
+            "        handleFooNullable(Foo.makeNonNull(new Object()));",
+            "        handleFooNonNull(Foo.makeNonNull(new Object()));",
+            "      }",
+            "      static void handleFooNullableVarargs(Foo<@Nullable Object>... args) {}",
+            "      static void handleFooNonNullVarargs(Foo<Object>... f) {}",
+            "      static void testVarargsCalls() {",
+            "        // legal",
+            "        handleFooNullableVarargs(Foo.makeNull(null));",
+            "        // BUG: Diagnostic contains: passing @Nullable parameter 'null' where @NonNull is required",
+            "        handleFooNonNullVarargs(Foo.makeNull(null));",
+            "        handleFooNullableVarargs(Foo.makeNull(new Object()));",
+            "        handleFooNonNullVarargs(Foo.makeNull(new Object()));",
+            "        // BUG: Diagnostic contains: passing @Nullable parameter 'null' where @NonNull is required",
+            "        handleFooNullableVarargs(Foo.makeNonNull(null));",
+            "        // BUG: Diagnostic contains: passing @Nullable parameter 'null' where @NonNull is required",
+            "        handleFooNonNullVarargs(Foo.makeNonNull(null));",
+            "        // BUG: Diagnostic contains: Cannot pass parameter of type Foo<Object>",
+            "        handleFooNullableVarargs(Foo.makeNonNull(new Object()));",
+            "        handleFooNonNullVarargs(Foo.makeNonNull(new Object()));",
+            "      }",
+            "    }")
+        .doTest();
+  }
+
+  @Test
+  public void genericMethodReturningTypeVariable() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "class Test {",
+            "  static class Foo<T extends @Nullable Object> {}",
+            "  static <T extends @Nullable Object> T returnTypeVariable(Foo<T> t) {",
+            "    throw new RuntimeException();",
+            "  }",
+            "  static void takesNullable(@Nullable String s) {}",
+            "  static void test() {",
+            "    // legal, but we can't infer the type yet",
+            "    takesNullable(Test.<@Nullable String>returnTypeVariable(new Foo<@Nullable String>()));",
+            "    // also legal",
+            "    takesNullable(returnTypeVariable(new Foo<String>()));",
+            "  }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void typeVarReturnNonNullUpperBound() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "class Test {",
+            "  static <T> T id(T t) {",
+            "    return t;",
+            "  }",
+            "  static void takesNullable(@Nullable String s) {}",
+            "  static void test() {",
+            "    // legal",
+            "    takesNullable(id(\"hi\"));",
+            "    // BUG: Diagnostic contains: passing @Nullable parameter 'null' where @NonNull is required",
+            "    takesNullable(id(null));",
+            "  }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void issue1238() {
+    makeHelper()
+        .addSourceLines(
+            "CreatorMediator.java",
+            "import org.jspecify.annotations.NullMarked;",
+            "import org.jspecify.annotations.Nullable;",
+            "@NullMarked",
+            "public class CreatorMediator {",
+            "    private final PropertyModel mCreatorModel = new PropertyModel();",
+            "    private void followClickHandler() {",
+            "        // this is fine: byte[] is assignable to byte @Nullable []",
+            "        WebFeedBridge.followFromId(",
+            "                mCreatorModel.get(CreatorProperties.WEB_FEED_ID_KEY));",
+            "    }",
+            "    private static class PropertyModel {",
+            "        <T extends @Nullable Object> T get(Key<T> key) {",
+            "            throw new RuntimeException();",
+            "        }",
+            "    }",
+            "    private static class CreatorProperties {",
+            "        static final Key<byte[]> WEB_FEED_ID_KEY = makeKey();",
+            "        private static Key<byte[]> makeKey() {",
+            "            throw new RuntimeException();",
+            "        }",
+            "    }",
+            "    private static class WebFeedBridge {",
+            "        static void followFromId(",
+            "                byte @Nullable [] webFeedId) {",
+            "        }",
+            "    }",
+            "    interface Key<T> {",
+            "    }",
+            "}")
+        .doTest();
+  }
+
   private CompilationTestHelper makeHelper() {
     return makeTestHelperWithArgs(
         Arrays.asList(

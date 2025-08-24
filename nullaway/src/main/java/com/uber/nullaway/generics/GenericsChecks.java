@@ -3,6 +3,7 @@ package com.uber.nullaway.generics;
 import static com.google.common.base.Verify.verify;
 import static com.uber.nullaway.NullabilityUtil.castToNonNull;
 
+import com.google.common.base.Verify;
 import com.google.errorprone.VisitorState;
 import com.google.errorprone.util.ASTHelpers;
 import com.sun.source.tree.AnnotatedTypeTree;
@@ -32,6 +33,7 @@ import com.uber.nullaway.Config;
 import com.uber.nullaway.ErrorBuilder;
 import com.uber.nullaway.ErrorMessage;
 import com.uber.nullaway.NullAway;
+import com.uber.nullaway.NullabilityUtil;
 import com.uber.nullaway.Nullness;
 import com.uber.nullaway.handlers.Handler;
 import java.util.ArrayList;
@@ -54,8 +56,8 @@ public final class GenericsChecks {
    * from type variables for the method to their inferred type arguments (most importantly with
    * inferred nullability information).
    */
-  private final Map<MethodInvocationTree, Map<TypeVariable, Type>>
-      inferredSubstitutionsForGenericMethodCalls = new LinkedHashMap<>();
+  private final Map<Tree, Map<TypeVariable, Type>> inferredSubstitutionsForGenericMethodCalls =
+      new LinkedHashMap<>();
 
   /**
    * Checks that for an instantiated generic type, {@code @Nullable} types are only used for type
@@ -445,36 +447,94 @@ public final class GenericsChecks {
       return;
     }
     Type rhsType = getTreeType(rhsTree, config);
-
-    if (rhsTree instanceof MethodInvocationTree) {
-      MethodInvocationTree methodInvocationTree = (MethodInvocationTree) rhsTree;
-      Symbol.MethodSymbol methodSymbol = ASTHelpers.getSymbol(methodInvocationTree);
-      if (methodSymbol.type instanceof Type.ForAll
-          && methodInvocationTree.getTypeArguments().isEmpty()) {
-        // generic method call with no explicit generic arguments
-        // update inferred type arguments based on the assignment context
-        InferSubstitutionViaAssignmentContextVisitor inferVisitor =
-            new InferSubstitutionViaAssignmentContextVisitor(config);
-        Type returnType = methodSymbol.getReturnType();
-        returnType.accept(inferVisitor, lhsType);
-
-        Map<TypeVariable, Type> substitution = inferVisitor.getInferredSubstitution();
-        inferredSubstitutionsForGenericMethodCalls.put(methodInvocationTree, substitution);
-        if (rhsType != null) {
-          // update rhsType with inferred substitution
-          rhsType =
-              substituteInferredTypesForTypeVariables(
-                  state, methodSymbol.getReturnType(), substitution, config);
-        }
-      }
-    }
-
     if (rhsType != null) {
+      if (rhsTree instanceof MethodInvocationTree) {
+        rhsType =
+            inferGenericMethodCallType(
+                analysis, state, (MethodInvocationTree) rhsTree, config, lhsType, rhsType);
+      }
       boolean isAssignmentValid = subtypeParameterNullability(lhsType, rhsType, state, config);
       if (!isAssignmentValid) {
         reportInvalidAssignmentInstantiationError(tree, lhsType, rhsType, state, analysis);
       }
     }
+  }
+
+  /**
+   * Infers the type of a generic method call based on the assignment context. Side-effects the
+   * #inferredSubstitutionsForGenericMethodCalls map with the inferred type.
+   *
+   * @param analysis the analysis
+   * @param state the visitor state
+   * @param invocationTree the method invocation tree representing the call to a generic method
+   * @param config the analysis config
+   * @param typeFromAssignmentContext the type being "assigned to" in the assignment context
+   * @param exprType the type of the right-hand side of the pseudo-assignment, which may be null
+   * @return the type of the method call after inference
+   */
+  private Type inferGenericMethodCallType(
+      NullAway analysis,
+      VisitorState state,
+      MethodInvocationTree invocationTree,
+      Config config,
+      Type typeFromAssignmentContext,
+      Type exprType) {
+    Type result = exprType;
+    MethodInvocationTree methodInvocationTree = invocationTree;
+    Symbol.MethodSymbol methodSymbol = ASTHelpers.getSymbol(methodInvocationTree);
+    if (methodSymbol.type instanceof Type.ForAll
+        && methodInvocationTree.getTypeArguments().isEmpty()) {
+      // generic method call with no explicit generic arguments
+      // update inferred type arguments based on the assignment context
+      boolean invokedMethodIsNullUnmarked =
+          CodeAnnotationInfo.instance(state.context)
+              .isSymbolUnannotated(methodSymbol, config, analysis.getHandler());
+      Map<TypeVariable, Type> substitution;
+      Type returnType = methodSymbol.getReturnType();
+      if (returnType instanceof Type.TypeVar) {
+        // we need different logic if the return type is a type variable
+        // if the assignment context type is @Nullable, we shouldn't infer anything, since that
+        // accommodates the type argument being either @Nullable or @NonNull
+        Type.TypeVar typeVar = (Type.TypeVar) returnType;
+        substitution = new LinkedHashMap<>();
+        boolean nonNullAssignmentContextType =
+            !Nullness.hasNullableAnnotation(
+                typeFromAssignmentContext.getAnnotationMirrors().stream(), config);
+        if (nonNullAssignmentContextType) {
+          // if the assignment context type is @NonNull, we can just use it
+          substitution.put(typeVar, typeFromAssignmentContext);
+        } else {
+          Type upperBound = typeVar.getUpperBound();
+          boolean typeVarHasNullableUpperBound =
+              Nullness.hasNullableAnnotation(upperBound.getAnnotationMirrors().stream(), config);
+          // if the type variable cannot be @Nullable, we can use the lhsType with any @Nullable
+          // annotation stripped
+          if (!typeVarHasNullableUpperBound && !invokedMethodIsNullUnmarked) {
+            // we can use the lhsType with any @Nullable annotation stripped
+            // TODO we should just strip out the top-level @Nullable annotation;
+            //  stripMetadata() also removes nested @Nullable annotations
+            substitution.put(typeVar, typeFromAssignmentContext.stripMetadata());
+          } else {
+            // Just stick with the original javac type of the expression.  As we improve inference
+            // we will do better.
+            substitution.put(typeVar, exprType);
+          }
+        }
+
+      } else {
+        InferGenericMethodSubstitutionViaAssignmentContextVisitor inferVisitor =
+            new InferGenericMethodSubstitutionViaAssignmentContextVisitor(
+                state, config, invokedMethodIsNullUnmarked);
+        returnType.accept(inferVisitor, typeFromAssignmentContext);
+        substitution = inferVisitor.getInferredSubstitution();
+      }
+      inferredSubstitutionsForGenericMethodCalls.put(methodInvocationTree, substitution);
+      // update with inferred substitution
+      result =
+          substituteInferredTypesForTypeVariables(
+              state, methodSymbol.getReturnType(), substitution, config);
+    }
+    return result;
   }
 
   /**
@@ -507,7 +567,7 @@ public final class GenericsChecks {
    * @param analysis the analysis object
    * @param state the visitor state
    */
-  public static void checkTypeParameterNullnessForFunctionReturnType(
+  public void checkTypeParameterNullnessForFunctionReturnType(
       ExpressionTree retExpr,
       Symbol.MethodSymbol methodSymbol,
       NullAway analysis,
@@ -524,6 +584,16 @@ public final class GenericsChecks {
     }
     Type returnExpressionType = getTreeType(retExpr, config);
     if (formalReturnType != null && returnExpressionType != null) {
+      if (retExpr instanceof MethodInvocationTree) {
+        returnExpressionType =
+            inferGenericMethodCallType(
+                analysis,
+                state,
+                (MethodInvocationTree) retExpr,
+                config,
+                formalReturnType,
+                returnExpressionType);
+      }
       boolean isReturnTypeValid =
           subtypeParameterNullability(formalReturnType, returnExpressionType, state, config);
       if (!isReturnTypeValid) {
@@ -695,6 +765,17 @@ public final class GenericsChecks {
             TypeSubstitutionUtils.memberType(state.getTypes(), enclosingType, methodSymbol, config);
       }
     }
+
+    // substitute type arguments for constructor call
+    if (tree instanceof NewClassTree) {
+      // get the type arguments from the NewClassTree itself
+      Type enclosingType = getTreeType(tree, config);
+      if (enclosingType != null) {
+        invokedMethodType =
+            TypeSubstitutionUtils.memberType(state.getTypes(), enclosingType, methodSymbol, config);
+      }
+    }
+
     // substitute type arguments for generic methods with explicit type arguments
     if (tree instanceof MethodInvocationTree && methodSymbol.type instanceof Type.ForAll) {
       invokedMethodType =
@@ -714,28 +795,48 @@ public final class GenericsChecks {
         // bail out of any checking involving raw types for now
         return;
       }
-      Type actualParameter = getTreeType(actualParams.get(i), config);
-      if (actualParameter != null) {
-        if (!subtypeParameterNullability(formalParameter, actualParameter, state, config)) {
+      ExpressionTree currentActualParam = actualParams.get(i);
+      Type actualParameterType = getTreeType(currentActualParam, config);
+      if (actualParameterType != null) {
+        if (currentActualParam instanceof MethodInvocationTree) {
+          // infer the type of the method call based on the assignment context
+          // and the formal parameter type
+          actualParameterType =
+              inferGenericMethodCallType(
+                  analysis,
+                  state,
+                  (MethodInvocationTree) currentActualParam,
+                  config,
+                  formalParameter,
+                  actualParameterType);
+        }
+        if (!subtypeParameterNullability(formalParameter, actualParameterType, state, config)) {
           reportInvalidParametersNullabilityError(
-              formalParameter, actualParameter, actualParams.get(i), state, analysis);
+              formalParameter, actualParameterType, currentActualParam, state, analysis);
         }
       }
     }
-    if (isVarArgs && !formalParamTypes.isEmpty()) {
-      Type.ArrayType varargsArrayType =
-          (Type.ArrayType) formalParamTypes.get(formalParamTypes.size() - 1);
-      Type varargsElementType = varargsArrayType.elemtype;
+    if (isVarArgs && !formalParamTypes.isEmpty() && NullabilityUtil.isVarArgsCall(tree)) {
+      Type varargsElementType =
+          ((Type.ArrayType) formalParamTypes.get(formalParamTypes.size() - 1)).elemtype;
       for (int i = formalParamTypes.size() - 1; i < actualParams.size(); i++) {
-        Type actualParameterType = getTreeType(actualParams.get(i), config);
-        // If the actual parameter type is assignable to the varargs array type, then the call site
-        // is passing the varargs directly in an array, and we should skip our check.
-        if (actualParameterType != null
-            && !state.getTypes().isAssignable(actualParameterType, varargsArrayType)) {
+        ExpressionTree actualParamExpr = actualParams.get(i);
+        Type actualParameterType = getTreeType(actualParamExpr, config);
+        if (actualParameterType != null) {
+          if (actualParamExpr instanceof MethodInvocationTree) {
+            actualParameterType =
+                inferGenericMethodCallType(
+                    analysis,
+                    state,
+                    (MethodInvocationTree) actualParamExpr,
+                    config,
+                    varargsElementType,
+                    actualParameterType);
+          }
           if (!subtypeParameterNullability(
               varargsElementType, actualParameterType, state, config)) {
             reportInvalidParametersNullabilityError(
-                varargsElementType, actualParameterType, actualParams.get(i), state, analysis);
+                varargsElementType, actualParameterType, actualParamExpr, state, analysis);
           }
         }
       }
@@ -820,16 +921,23 @@ public final class GenericsChecks {
   private static @Nullable Type getTypeForSymbol(Symbol symbol, VisitorState state, Config config) {
     if (symbol.isAnonymous()) {
       // For anonymous classes, symbol.type does not contain annotations on generic type parameters.
-      // So, we get a correct type from the enclosing NewClassTree.
+      // So, we get a correct type from the enclosing NewClassTree representing the anonymous class.
       TreePath path = state.getPath();
-      NewClassTree newClassTree = ASTHelpers.findEnclosingNode(path, NewClassTree.class);
-      if (newClassTree == null) {
+      path =
+          castToNonNull(ASTHelpers.findPathFromEnclosingNodeToTopLevel(path, NewClassTree.class));
+      NewClassTree newClassTree = (NewClassTree) path.getLeaf();
+      if (newClassTree.getClassBody() == null) {
         throw new RuntimeException(
-            "method should be inside a NewClassTree " + state.getSourceForNode(path.getLeaf()));
+            "method should be directly inside an anonymous NewClassTree "
+                + state.getSourceForNode(path.getLeaf()));
       }
       Type typeFromTree = getTreeType(newClassTree, config);
       if (typeFromTree != null) {
-        verify(state.getTypes().isAssignable(symbol.type, typeFromTree));
+        verify(
+            state.getTypes().isAssignable(symbol.type, typeFromTree),
+            "%s is not assignable to %s",
+            symbol.type,
+            typeFromTree);
       }
       return typeFromTree;
     } else {
@@ -932,19 +1040,19 @@ public final class GenericsChecks {
   /**
    * Substitutes the type arguments from a generic method invocation into the method's type.
    *
-   * @param methodInvocationTree the method invocation tree
+   * @param tree the method invocation tree
    * @param methodSymbol symbol for the invoked generic method
    * @param state the visitor state
    * @param config the NullAway config
    * @return the substituted method type for the generic method
    */
   private Type substituteTypeArgsInGenericMethodType(
-      MethodInvocationTree methodInvocationTree,
-      Symbol.MethodSymbol methodSymbol,
-      VisitorState state,
-      Config config) {
+      Tree tree, Symbol.MethodSymbol methodSymbol, VisitorState state, Config config) {
 
-    List<? extends Tree> typeArgumentTrees = methodInvocationTree.getTypeArguments();
+    List<? extends Tree> typeArgumentTrees =
+        (tree instanceof MethodInvocationTree)
+            ? ((MethodInvocationTree) tree).getTypeArguments()
+            : ((NewClassTree) tree).getTypeArguments();
     com.sun.tools.javac.util.List<Type> explicitTypeArgs = convertTreesToTypes(typeArgumentTrees);
 
     Type.ForAll forAllType = (Type.ForAll) methodSymbol.type;
@@ -952,11 +1060,11 @@ public final class GenericsChecks {
 
     // There are no explicit type arguments, so use the inferred types
     if (explicitTypeArgs.isEmpty()) {
-      if (inferredSubstitutionsForGenericMethodCalls.containsKey(methodInvocationTree)) {
+      if (inferredSubstitutionsForGenericMethodCalls.containsKey(tree)) {
         return substituteInferredTypesForTypeVariables(
             state,
             underlyingMethodType,
-            inferredSubstitutionsForGenericMethodCalls.get(methodInvocationTree),
+            inferredSubstitutionsForGenericMethodCalls.get(tree),
             config);
       }
     }
@@ -1001,9 +1109,12 @@ public final class GenericsChecks {
   public Nullness getGenericParameterNullnessAtInvocation(
       int paramIndex,
       Symbol.MethodSymbol invokedMethodSymbol,
-      MethodInvocationTree tree,
+      Tree tree,
       VisitorState state,
       Config config) {
+    boolean isVarargsParam =
+        invokedMethodSymbol.isVarArgs()
+            && paramIndex == invokedMethodSymbol.getParameters().size() - 1;
     // If generic method invocation
     if (!invokedMethodSymbol.getTypeParameters().isEmpty()) {
       // Substitute the argument types within the MethodType
@@ -1014,16 +1125,34 @@ public final class GenericsChecks {
       // type variables declared on the enclosing class
       if (substitutedParamTypes != null
           && Objects.equals(
-              getTypeNullness(substitutedParamTypes.get(paramIndex), config), Nullness.NULLABLE)) {
+              getParameterTypeNullness(
+                  substitutedParamTypes.get(paramIndex), config, isVarargsParam),
+              Nullness.NULLABLE)) {
         return Nullness.NULLABLE;
       }
     }
 
-    if (!(tree.getMethodSelect() instanceof MemberSelectTree) || invokedMethodSymbol.isStatic()) {
-      return Nullness.NONNULL;
+    if (tree instanceof MethodInvocationTree) {
+      if (!(((MethodInvocationTree) tree).getMethodSelect() instanceof MemberSelectTree)
+          || invokedMethodSymbol.isStatic()) {
+        return Nullness.NONNULL;
+      }
     }
-    Type enclosingType =
-        getTreeType(((MemberSelectTree) tree.getMethodSelect()).getExpression(), config);
+
+    Type enclosingType = null;
+    if (tree instanceof MethodInvocationTree) {
+      enclosingType =
+          getTreeType(
+              ((MemberSelectTree) ((MethodInvocationTree) tree).getMethodSelect()).getExpression(),
+              config);
+
+    } else {
+      Verify.verify(tree instanceof NewClassTree);
+      // for a constructor invocation, the type from the invocation itself is the "enclosing type"
+      // for the purposes of determining type arguments
+      enclosingType = getTreeType(tree, config);
+    }
+
     return getGenericMethodParameterNullness(
         paramIndex, invokedMethodSymbol, enclosingType, state, config);
   }
@@ -1094,10 +1223,13 @@ public final class GenericsChecks {
       // @Nullable annotation is handled elsewhere)
       return Nullness.NONNULL;
     }
+    boolean isVarargsParam =
+        method.isVarArgs() && parameterIndex == method.getParameters().size() - 1;
+
     Type methodType =
         TypeSubstitutionUtils.memberType(state.getTypes(), enclosingType, method, config);
     Type paramType = methodType.getParameterTypes().get(parameterIndex);
-    return getTypeNullness(paramType, config);
+    return getParameterTypeNullness(paramType, config, isVarargsParam);
   }
 
   /**
@@ -1157,6 +1289,33 @@ public final class GenericsChecks {
         overriddenMethodReturnType, overridingMethodReturnType, state, analysis.getConfig())) {
       reportInvalidOverridingMethodReturnTypeError(
           tree, overriddenMethodReturnType, overridingMethodReturnType, analysis, state);
+    }
+  }
+
+  /**
+   * Returns the nullness of a formal parameter type, based on the nullability annotations on the
+   * type.
+   *
+   * @param type The type of the parameter
+   * @param config The analysis config
+   * @param isVarargsParam true if the parameter is a varargs parameter
+   * @return The nullness of the parameter type
+   */
+  private static Nullness getParameterTypeNullness(
+      Type type, Config config, boolean isVarargsParam) {
+    if (isVarargsParam) {
+      // type better be an array type
+      verify(
+          type.getKind().equals(TypeKind.ARRAY),
+          "expected array type for varargs parameter, got %s",
+          type);
+      // use the component type to determine nullness
+      Type.ArrayType arrayType = (Type.ArrayType) type;
+      Type componentType = arrayType.getComponentType();
+      return getTypeNullness(componentType, config);
+    } else {
+      // For non-varargs, we just check the type itself
+      return getTypeNullness(type, config);
     }
   }
 

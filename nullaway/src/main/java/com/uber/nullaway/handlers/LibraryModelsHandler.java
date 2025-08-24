@@ -34,7 +34,7 @@ import com.google.common.collect.ImmutableSetMultimap;
 import com.google.errorprone.VisitorState;
 import com.google.errorprone.util.ASTHelpers;
 import com.sun.source.tree.ExpressionTree;
-import com.sun.source.tree.Tree;
+import com.sun.source.tree.MethodInvocationTree;
 import com.sun.tools.javac.code.Symbol;
 import com.sun.tools.javac.code.Types;
 import com.sun.tools.javac.util.Context;
@@ -46,6 +46,7 @@ import com.uber.nullaway.LibraryModels;
 import com.uber.nullaway.LibraryModels.MethodRef;
 import com.uber.nullaway.NullAway;
 import com.uber.nullaway.Nullness;
+import com.uber.nullaway.annotations.Initializer;
 import com.uber.nullaway.dataflow.AccessPath;
 import com.uber.nullaway.dataflow.AccessPathNullnessPropagation;
 import com.uber.nullaway.handlers.stream.StreamTypeRecord;
@@ -73,6 +74,7 @@ import org.jspecify.annotations.Nullable;
 public class LibraryModelsHandler extends BaseNoOpHandler {
 
   private final Config config;
+  private Handler mainHandler;
   private final LibraryModels libraryModels;
 
   private @Nullable OptimizedLibraryModels optLibraryModels;
@@ -81,6 +83,11 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
     super();
     this.config = config;
     libraryModels = loadLibraryModels(config);
+  }
+
+  @Initializer
+  public void initMainHandler(Handler mainHandler) {
+    this.mainHandler = mainHandler;
   }
 
   @Override
@@ -103,11 +110,11 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
   }
 
   @Override
-  public Nullness[] onOverrideMethodInvocationParametersNullability(
+  public @Nullable Nullness[] onOverrideMethodInvocationParametersNullability(
       Context context,
       Symbol.MethodSymbol methodSymbol,
       boolean isAnnotated,
-      Nullness[] argumentPositionNullness) {
+      @Nullable Nullness[] argumentPositionNullness) {
     OptimizedLibraryModels optimizedLibraryModels = getOptLibraryModels(context);
     ImmutableSet<Integer> nullableParamsFromModel =
         optimizedLibraryModels.explicitlyNullableParameters(methodSymbol);
@@ -157,8 +164,7 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
     if (isNullableFieldInLibraryModels(exprSymbol)) {
       return true;
     }
-    if (!(expr.getKind() == Tree.Kind.METHOD_INVOCATION
-        && exprSymbol instanceof Symbol.MethodSymbol)) {
+    if (!(expr instanceof MethodInvocationTree && exprSymbol instanceof Symbol.MethodSymbol)) {
       return exprMayBeNull;
     }
     OptimizedLibraryModels optLibraryModels = getOptLibraryModels(state.context);
@@ -169,7 +175,8 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
     // and any of its overriding implementations.
     // see https://github.com/uber/NullAway/issues/445 for why this is needed.
     boolean isMethodUnannotated =
-        getCodeAnnotationInfo(state.context).isSymbolUnannotated(methodSymbol, this.config, null);
+        getCodeAnnotationInfo(state.context)
+            .isSymbolUnannotated(methodSymbol, this.config, mainHandler);
     if (exprMayBeNull) {
       // This is the only case in which we may switch the result from @Nullable to @NonNull:
       return !optLibraryModels.hasNonNullReturn(
@@ -226,7 +233,7 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
       AccessPathNullnessPropagation.Updates elseUpdates,
       AccessPathNullnessPropagation.Updates bothUpdates) {
     boolean isMethodAnnotated =
-        !getCodeAnnotationInfo(state.context).isSymbolUnannotated(callee, this.config, null);
+        !getCodeAnnotationInfo(state.context).isSymbolUnannotated(callee, this.config, mainHandler);
     setUnconditionalArgumentNullness(bothUpdates, node.getArguments(), callee, state, apContext);
     setConditionalArgumentNullness(
         thenUpdates, elseUpdates, node.getArguments(), callee, state, apContext);
@@ -706,6 +713,29 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
                 methodRef(
                     "org.springframework.util.CollectionUtils", "isEmpty(java.util.Collection<?>)"),
                 0)
+            .put(
+                methodRef(
+                    "org.apache.commons.collections.CollectionUtils",
+                    "isEmpty(java.util.Collection)"),
+                0)
+            .put(
+                methodRef(
+                    "org.apache.commons.collections4.CollectionUtils",
+                    "isEmpty(java.util.Collection<?>)"),
+                0)
+            .put(
+                methodRef(
+                    "software.amazon.awssdk.utils.CollectionUtils",
+                    "isNullOrEmpty(java.util.Collection<?>)"),
+                0)
+            .put(
+                methodRef(
+                    "software.amazon.awssdk.utils.StringUtils", "isEmpty(java.lang.CharSequence)"),
+                0)
+            .put(
+                methodRef(
+                    "software.amazon.awssdk.utils.StringUtils", "isBlank(java.lang.CharSequence)"),
+                0)
             .put(methodRef("org.springframework.util.StringUtils", "isEmpty(java.lang.Object)"), 0)
             .put(methodRef("org.springframework.util.ObjectUtils", "isEmpty(java.lang.Object)"), 0)
             .put(methodRef("spark.utils.ObjectUtils", "isEmpty(java.lang.Object[])"), 0)
@@ -960,7 +990,7 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
 
     private final ImmutableList<StreamTypeRecord> customStreamNullabilitySpecs;
 
-    public CombinedLibraryModels(Iterable<LibraryModels> models, Config config) {
+    CombinedLibraryModels(Iterable<LibraryModels> models, Config config) {
       this.config = config;
       ImmutableSetMultimap.Builder<MethodRef, Integer> failIfNullParametersBuilder =
           new ImmutableSetMultimap.Builder<>();
@@ -1161,7 +1191,7 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
         this.state = state;
       }
 
-      public @Nullable T get(Symbol.MethodSymbol symbol) {
+      @Nullable T get(Symbol.MethodSymbol symbol) {
         Map<MethodRef, T> methodRefTMap = state.get(symbol.name);
         if (methodRefTMap == null) {
           return null;
@@ -1170,7 +1200,7 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
         return methodRefTMap.get(ref);
       }
 
-      public boolean nameNotPresent(Symbol.MethodSymbol symbol) {
+      boolean nameNotPresent(Symbol.MethodSymbol symbol) {
         return state.get(symbol.name) == null;
       }
     }
@@ -1185,7 +1215,7 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
     private final NameIndexedMap<Boolean> nonNullRet;
     private final NameIndexedMap<ImmutableSet<Integer>> castToNonNullMethods;
 
-    public OptimizedLibraryModels(LibraryModels models, Context context) {
+    OptimizedLibraryModels(LibraryModels models, Context context) {
       Names names = Names.instance(context);
       failIfNullParams = makeOptimizedIntSetLookup(names, models.failIfNullParameters());
       explicitlyNullableParams =
@@ -1200,11 +1230,11 @@ public class LibraryModelsHandler extends BaseNoOpHandler {
       castToNonNullMethods = makeOptimizedIntSetLookup(names, models.castToNonNullMethods());
     }
 
-    public boolean hasNonNullReturn(Symbol.MethodSymbol symbol, Types types, boolean checkSuper) {
+    boolean hasNonNullReturn(Symbol.MethodSymbol symbol, Types types, boolean checkSuper) {
       return lookupHandlingOverrides(symbol, types, nonNullRet, checkSuper) != null;
     }
 
-    public boolean hasNullableReturn(Symbol.MethodSymbol symbol, Types types, boolean checkSuper) {
+    boolean hasNullableReturn(Symbol.MethodSymbol symbol, Types types, boolean checkSuper) {
       return lookupHandlingOverrides(symbol, types, nullableRet, checkSuper) != null;
     }
 

@@ -508,6 +508,32 @@ public class GenericsTests extends NullAwayTestsBase {
   }
 
   @Test
+  public void testForLambdaInAssignment() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "package com.uber;",
+            "import org.jspecify.annotations.Nullable;",
+            "import java.util.function.Supplier;",
+            "class Test {",
+            "  interface A<T1 extends @Nullable Object> {",
+            "    String function(T1 o);",
+            "  }",
+            "  static String foo(Object o) {",
+            "    return o.toString();",
+            "  }",
+            "  static void testPositive() {",
+            "    // BUG: Diagnostic contains: dereferenced expression x is @Nullable",
+            "    A<@Nullable Object> p = x -> x.toString();",
+            "  }",
+            "  static void testNegative() {",
+            "    A<Object> p = x -> \"hello\";",
+            "  }",
+            "}")
+        .doTest();
+  }
+
+  @Test
   public void testForMethodReferenceForClassFieldAssignment() {
     makeHelper()
         .addSourceLines(
@@ -2293,6 +2319,224 @@ public class GenericsTests extends NullAwayTestsBase {
             "    abstract class DefaultBodySpec<B, S extends BodySpec<B, S>> implements BodySpec<B, S> {",
             "        @Override",
             "        public abstract <T extends S> T value(Consumer<@Nullable B> consumer);",
+            "    }",
+            "}")
+        .doTest();
+  }
+
+  @Ignore("https://github.com/uber/NullAway/issues/1155")
+  @Test
+  public void callWithConstructorReceiver() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "import org.jspecify.annotations.NullMarked;",
+            "import org.jspecify.annotations.Nullable;",
+            "@NullMarked",
+            "public class Test {",
+            "  private static class Inner<T extends @Nullable Object> {",
+            "    Inner<T> identity() { return this; }",
+            "  }",
+            "  Inner<@Nullable Object> mThing = new Inner<@Nullable Object>().identity();",
+            "}")
+        .doTest();
+  }
+
+  @Ignore("https://github.com/uber/NullAway/issues/1246")
+  @Test
+  public void nullableSuperConstructorArg() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "import org.jspecify.annotations.NullMarked;",
+            "import org.jspecify.annotations.Nullable;",
+            "@NullMarked",
+            "public class Test {",
+            "  private static class A<T extends @Nullable Object> {",
+            "    A(T t) {}",
+            "  }",
+            "  private static class B extends A<@Nullable Object> {",
+            "    B() {",
+            "      super(null);",
+            "  }",
+            "  }",
+            "}")
+        .doTest();
+  }
+
+  @Ignore("https://github.com/uber/NullAway/issues/1246")
+  @Test
+  public void nullableSuperMethodArg() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "import org.jspecify.annotations.NullMarked;",
+            "import org.jspecify.annotations.Nullable;",
+            "@NullMarked",
+            "public class Test {",
+            "  private static class A<T extends @Nullable Object> {",
+            "    void m(T t) {}",
+            "  }",
+            "  private static class B extends A<@Nullable Object> {",
+            "    void test() {",
+            "      m(null);",
+            "    }",
+            "  }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void newNullableWithArg() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "import org.jspecify.annotations.NullMarked;",
+            "import org.jspecify.annotations.Nullable;",
+            "@NullMarked",
+            "public class Test {",
+            "  private static class Wrapper<T extends @Nullable String> {",
+            "    private final T value;",
+            "    Wrapper(T value) {",
+            "      this.value = value;",
+            "    }",
+            "  }",
+            "  Wrapper<@Nullable String> testConstructorCall() {",
+            "    return new Wrapper<@Nullable String>(null);",
+            "  }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void newNullableWithArgAndConstructorType() {
+    makeHelper()
+        .addSourceLines(
+            "Holder.java",
+            "import org.jspecify.annotations.NullMarked;",
+            "import org.jspecify.annotations.Nullable;",
+            "@NullMarked",
+            "public class Holder {",
+            "  String s;",
+            "  public <U extends @Nullable Object> Holder(U value) {",
+            "    s = String.valueOf(value);",
+            "  }",
+            "  static Holder testNegative() {",
+            "    return new <@Nullable String>Holder(null);",
+            "  }",
+            "  static Holder testPositive() {",
+            "    // BUG: Diagnostic contains: passing @Nullable parameter 'null' where @NonNull is required",
+            "    return new <String>Holder(null);",
+            "  }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void lambdaToNewNullable() {
+    makeHelper()
+        .addSourceLines(
+            "Foo.java",
+            "import org.jspecify.annotations.NullMarked;",
+            "import org.jspecify.annotations.Nullable;",
+            "@NullMarked",
+            "class Foo {",
+            "    interface Supplier<T extends @Nullable Object> {",
+            "        T get();",
+            "    }",
+            "    static class SupplierImpl<T2 extends @Nullable Object> implements Supplier<T2> {",
+            "        Supplier<T2> impl;",
+            "        SupplierImpl(Supplier<T2> delegate) {",
+            "            impl = delegate;",
+            "        }",
+            "        @Override",
+            "        public T2 get() {",
+            "            return impl.get();",
+            "        }",
+            "    }",
+            "    static void main() {",
+            "        Supplier<@Nullable Foo> sup = () -> null;",
+            "        new SupplierImpl<@Nullable Foo>(sup);",
+            "    }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void issue1156() {
+    makeHelper()
+        .addSourceLines(
+            "Foo.java",
+            "import org.jspecify.annotations.NullMarked;",
+            "import java.util.function.Function;",
+            "import java.util.function.Supplier;",
+            "@NullMarked",
+            "public class Foo implements Supplier<Integer> {",
+            "  public Foo(Function<Integer, Integer> func) {",
+            "  }",
+            "  @Override",
+            "  public Integer get() {",
+            "    return 0;",
+            "  }",
+            "  public static void test() {",
+            "    new Supplier<Boolean>() {",
+            "      @Override",
+            "      public Boolean get() {",
+            "        Foo foo = new Foo(x -> 1);",
+            "        return true;",
+            "      }",
+            "    };",
+            "  }",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void methodReferenceToNullUnmarked() {
+    makeHelper()
+        .addSourceLines(
+            "Test.java",
+            "import org.jspecify.annotations.*;",
+            "import java.util.function.Function;",
+            "@NullMarked",
+            "public class Test {",
+            "  @NullUnmarked",
+            "  public static Boolean isNull(Object o) { return o == null; }",
+            "  @NullUnmarked",
+            "  public static Boolean isNullRestrictParam(@NonNull Object o) { return o == null; }",
+            "  @NullUnmarked",
+            "  public static @Nullable Boolean isNullRestrictReturn(Object o) { return o == null; }",
+            "  static Function<@Nullable Object, Boolean> filter1 = Test::isNull;",
+            "  // BUG: Diagnostic contains: parameter o of referenced method is @NonNull, but parameter in functional",
+            "  static Function<@Nullable Object, Boolean> filter2 = Test::isNullRestrictParam;",
+            "  // BUG: Diagnostic contains: referenced method returns @Nullable",
+            "  static Function<@Nullable Object, Boolean> filter3 = Test::isNullRestrictReturn;",
+            "  static Function<@Nullable Object, @Nullable Boolean> filter4 = Test::isNullRestrictReturn;",
+            "}")
+        .doTest();
+  }
+
+  @Test
+  public void varargsOfGenericType() {
+    makeHelper()
+        .addSourceLines(
+            "Varargs.java",
+            "import org.jspecify.annotations.NullMarked;",
+            "import org.jspecify.annotations.Nullable;",
+            "@NullMarked",
+            "public class Varargs {",
+            "    static class Foo<T extends @Nullable Object> {",
+            "        void foo(T... args) {",
+            "        }",
+            "    }",
+            "    static void testNegative(@Nullable String s) {",
+            "        Foo<@Nullable String> f = new Foo<>();",
+            "        f.foo(s);",
+            "    }",
+            "    static void testPositive(@Nullable String s) {",
+            "        Foo<String> f = new Foo<>();",
+            "        // BUG: Diagnostic contains: passing @Nullable parameter",
+            "        f.foo(s);",
             "    }",
             "}")
         .doTest();
