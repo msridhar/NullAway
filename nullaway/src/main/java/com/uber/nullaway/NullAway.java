@@ -1574,7 +1574,9 @@ public class NullAway extends BugChecker
     }
     VarSymbol symbol = ASTHelpers.getSymbol(tree);
     if (fieldsWithUsedSuppressions.contains(symbol)) {
-      ((SuppressionInfo.Suppressed) state.getSuppressedState()).setAsUsed();
+      if (state.getSuppressedState() instanceof SuppressionInfo.Suppressed) {
+        ((SuppressionInfo.Suppressed) state.getSuppressedState()).setAsUsed();
+      }
     }
     if (tree.getInitializer() != null && config.isJSpecifyMode()) {
       genericsChecks.checkTypeParameterNullnessForAssignability(tree, state);
