@@ -98,6 +98,33 @@ public class CheckIdenticalNullabilityVisitor extends Types.DefaultTypeVisitor<B
     if (rhsType instanceof NullType) {
       return true;
     }
+    if (rhsType instanceof Type.TypeVar) {
+      Type upperBound = ((Type.TypeVar) rhsType).getUpperBound();
+      if (upperBound != null && upperBound.getKind().equals(TypeKind.ARRAY)) {
+        rhsType = upperBound;
+      } else {
+        return true;
+      }
+    }
+    if (rhsType instanceof Type.CapturedType) {
+      Type upperBound = ((Type.CapturedType) rhsType).getUpperBound();
+      if (upperBound != null && upperBound.getKind().equals(TypeKind.ARRAY)) {
+        rhsType = upperBound;
+      } else {
+        return true;
+      }
+    }
+    if (rhsType.getKind().equals(TypeKind.WILDCARD)) {
+      Type.WildcardType wildcard = (Type.WildcardType) rhsType;
+      Types types = state.getTypes();
+      Type bound =
+          wildcard.isSuperBound() ? types.wildLowerBound(wildcard) : types.wildUpperBound(wildcard);
+      if (!bound.getKind().equals(TypeKind.ARRAY)) {
+        // Nothing meaningful to compare; treat as compatible to avoid crashes
+        return true;
+      }
+      rhsType = bound;
+    }
     Type.ArrayType arrRhsType = (Type.ArrayType) rhsType;
     Type lhsComponentType = lhsType.getComponentType();
     Type rhsComponentType = arrRhsType.getComponentType();

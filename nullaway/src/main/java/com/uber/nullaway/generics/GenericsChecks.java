@@ -108,6 +108,12 @@ public final class GenericsChecks {
    */
   private final Map<LambdaExpressionTree, Type> inferredLambdaTypes = new LinkedHashMap<>();
 
+  /**
+   * Maps each lambda parameter symbol to its inferred type (with nullability), when inference for
+   * the enclosing lambda argument succeeded.
+   */
+  private final Map<Symbol, Type> inferredLambdaParameterTypes = new LinkedHashMap<>();
+
   public @Nullable Type getInferredLambdaType(LambdaExpressionTree tree) {
     return inferredLambdaTypes.get(tree);
   }
@@ -501,31 +507,30 @@ public final class GenericsChecks {
     if (symbol.owner != null && symbol.owner.getKind() == ElementKind.METHOD) {
       Symbol.MethodSymbol containingMethodSymbol = (Symbol.MethodSymbol) symbol.owner;
       if (!containingMethodSymbol.getParameters().contains(symbol)) {
-        // we have a lambda parameter
-        LambdaExpressionTree lambdaTree =
-            ASTHelpers.findEnclosingNode(state.getPath(), LambdaExpressionTree.class);
-        if (lambdaTree != null) {
-          Type inferredLambdaType = inferredLambdaTypes.get(lambdaTree);
-          if (inferredLambdaType != null) {
-            // type of lambda was inferred
-            var params = lambdaTree.getParameters();
-            for (int i = 0; i < params.size(); i++) {
-              VariableTree param = params.get(i);
-              Symbol paramSymbol = ASTHelpers.getSymbol(param);
-              if (paramSymbol != null && paramSymbol.equals(symbol)) {
-                // get the type of the functional interface method as a member of the inferred type
-                // of the lambda
-                Types types = state.getTypes();
-                var fiMethodType =
-                    TypeSubstitutionUtils.memberType(
-                        types,
-                        inferredLambdaType,
-                        NullabilityUtil.getFunctionalInterfaceMethod(lambdaTree, types),
-                        config);
-                return fiMethodType.getParameterTypes().get(i);
-              }
+        Type inferredParamType = inferredLambdaParameterTypes.get(symbol);
+        if (inferredParamType != null) {
+          Types types = state.getTypes();
+          if (inferredParamType.getKind().equals(TypeKind.WILDCARD)) {
+            Type.WildcardType wildcardParamType = (Type.WildcardType) inferredParamType;
+            if (wildcardParamType.isSuperBound()) {
+              return types.wildLowerBound(inferredParamType);
+            } else {
+              return types.wildUpperBound(inferredParamType);
             }
           }
+          if (inferredParamType instanceof Type.CapturedType) {
+            Type lowerBound = ((Type.CapturedType) inferredParamType).getLowerBound();
+            if (lowerBound != null && lowerBound.getKind() != TypeKind.NONE) {
+              return lowerBound;
+            }
+          }
+          if (inferredParamType instanceof Type.TypeVar) {
+            Type lowerBound = ((Type.TypeVar) inferredParamType).getLowerBound();
+            if (lowerBound != null && lowerBound.getKind() != TypeKind.NONE) {
+              return lowerBound;
+            }
+          }
+          return inferredParamType;
         }
       }
     }
@@ -705,9 +710,58 @@ public final class GenericsChecks {
           .forEach(
               (argument, argPos, formalParamType, unused) -> {
                 if (argument instanceof LambdaExpressionTree) {
-                  Type inferredType =
+                  Type withInferredNullability =
                       getTypeWithInferredNullability(state, formalParamType, typeVarNullability);
-                  inferredLambdaTypes.put((LambdaExpressionTree) argument, inferredType);
+                  Type inferredType = null;
+                  Type lambdaTypeFromTree = ASTHelpers.getType(argument);
+                  if (lambdaTypeFromTree instanceof Type.ClassType) {
+                    // Substitute any inferred nullability on type variables into the concrete type
+                    // arguments from javac's target typing of the lambda.
+                    Type.ClassType targetClass = (Type.ClassType) lambdaTypeFromTree;
+                    inferredType =
+                        TypeSubstitutionUtils.subst(
+                            state.getTypes(),
+                            withInferredNullability,
+                            targetClass.tsym.type.getTypeArguments(),
+                            targetClass.getTypeArguments(),
+                            config);
+                  }
+                  if (inferredType == null && lambdaTypeFromTree != null) {
+                    inferredType =
+                        TypeSubstitutionUtils.restoreExplicitNullabilityAnnotations(
+                            withInferredNullability,
+                            lambdaTypeFromTree,
+                            config,
+                            Collections.emptyMap());
+                  }
+                  if (inferredType == null) {
+                    Types types = state.getTypes();
+                    Type captured = types.capture(withInferredNullability);
+                    // capture() can drop type-use annotations; restore them from the pre-capture
+                    // type
+                    inferredType =
+                        TypeSubstitutionUtils.restoreExplicitNullabilityAnnotations(
+                            withInferredNullability, captured, config, Collections.emptyMap());
+                  }
+                  LambdaExpressionTree lambda = (LambdaExpressionTree) argument;
+                  inferredLambdaTypes.put(lambda, inferredType);
+
+                  // Store parameter types for the lambda's functional interface method, with
+                  // inferred nullability substituted in.
+                  Symbol.MethodSymbol fiMethod =
+                      NullabilityUtil.getFunctionalInterfaceMethod(lambda, state.getTypes());
+                  Type.MethodType fiMethodType =
+                      TypeSubstitutionUtils.memberType(
+                              state.getTypes(), inferredType, fiMethod, config)
+                          .asMethodType();
+                  var params = lambda.getParameters();
+                  for (int i = 0; i < params.size(); i++) {
+                    Symbol paramSymbol = ASTHelpers.getSymbol(params.get(i));
+                    if (paramSymbol != null) {
+                      inferredLambdaParameterTypes.put(
+                          paramSymbol, fiMethodType.getParameterTypes().get(i));
+                    }
+                  }
                 }
               });
 
@@ -2032,6 +2086,7 @@ public final class GenericsChecks {
   public void clearCache() {
     inferredTypeVarNullabilityForGenericCalls.clear();
     inferredLambdaTypes.clear();
+    inferredLambdaParameterTypes.clear();
   }
 
   public boolean isNullableAnnotated(Type type) {
