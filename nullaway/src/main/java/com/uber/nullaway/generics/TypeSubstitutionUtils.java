@@ -430,10 +430,7 @@ public class TypeSubstitutionUtils {
     }
 
     /**
-     * Restores an explicit annotation from a substituted type variable onto a wildcard's upper
-     * bound. Copies implicit bounds before updating them so other uses of the formal type variable
-     * retain their original nullness. For captured wildcards, the capture can supply a missing
-     * formal type variable.
+     * Restores annotations from another type onto a wildcard's upper bound.
      *
      * @param wildcard the wildcard type whose upper bound should be updated
      * @param implicitUpperBoundTypeVariable for unbounded or lower bounded wildcard types, the type
