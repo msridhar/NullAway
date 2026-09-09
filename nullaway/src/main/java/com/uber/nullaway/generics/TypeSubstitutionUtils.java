@@ -430,17 +430,26 @@ public class TypeSubstitutionUtils {
     }
 
     /**
-     * Restores an explicit annotation from a substituted type variable onto a wildcard's read
+     * Restores an explicit annotation from a substituted type variable onto a wildcard's upper
      * bound. Copies implicit bounds before updating them so other uses of the formal type variable
      * retain their original nullness. For captured wildcards, the capture can supply a missing
      * formal type variable.
+     *
+     * @param wildcard the wildcard type whose upper bound should be updated
+     * @param implicitUpperBoundTypeVariable for unbounded or lower bounded wildcard types, the type
+     *     variable from which to obtain an upper bound, or null if not available
+     * @param other the other type from which to restore annotations
      */
     private Type.WildcardType restoreWildcardUpperBoundAnnotation(
-        Type.WildcardType wildcard, Type.@Nullable TypeVar formalTypeVariable, Type other) {
+        Type.WildcardType wildcard,
+        Type.@Nullable TypeVar implicitUpperBoundTypeVariable,
+        Type other) {
       Type upperBound =
           wildcard.kind == BoundKind.EXTENDS
               ? wildcard.type
-              : formalTypeVariable == null ? null : formalTypeVariable.getUpperBound();
+              : implicitUpperBoundTypeVariable == null
+                  ? null
+                  : implicitUpperBoundTypeVariable.getUpperBound();
       if (upperBound == null) {
         return wildcard;
       }
@@ -450,12 +459,14 @@ public class TypeSubstitutionUtils {
       }
       if (wildcard.kind == BoundKind.EXTENDS) {
         return TYPE_METADATA_BUILDER.createWildcardType(wildcard, updatedBound);
+      } else { // unbounded or lower-bounded wildcard
+        Type.WildcardType updated =
+            TYPE_METADATA_BUILDER.createWildcardType(wildcard, wildcard.type);
+        updated.bound =
+            TYPE_METADATA_BUILDER.createDetachedTypeVar(
+                Verify.verifyNotNull(implicitUpperBoundTypeVariable), updatedBound);
+        return updated;
       }
-      Type.WildcardType updated = TYPE_METADATA_BUILDER.createWildcardType(wildcard, wildcard.type);
-      updated.bound =
-          TYPE_METADATA_BUILDER.createDetachedTypeVar(
-              Verify.verifyNotNull(formalTypeVariable), updatedBound);
-      return updated;
     }
 
     /**
