@@ -84,14 +84,12 @@ public class WildcardTests extends NullAwayTestsBase {
                 takesNonNull(holder.nonNullValue());
                 // BUG: Diagnostic contains: passing @Nullable parameter 'holder.value()'
                 takesNonNull(holder.value());
-                takesNonNull(holder.nonNullValue());
               }
 
               static void superBounded(Child<? super String> holder) {
                 takesNonNull(holder.nonNullValue());
                 // BUG: Diagnostic contains: passing @Nullable parameter 'holder.value()'
                 takesNonNull(holder.value());
-                takesNonNull(holder.nonNullValue());
               }
             }
             """)
