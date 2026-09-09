@@ -511,6 +511,7 @@ public class TypeSubstitutionUtils {
         }
         updatedWildcard = TYPE_METADATA_BUILDER.createWildcardType(t.wildcard, updatedBound);
       } else {
+        Verify.verify(t.wildcard.kind == BoundKind.UNBOUND || t.wildcard.kind == BoundKind.SUPER);
         // t.wildcard is either unbounded or lower bounded (with super).  We want to find the
         // corresponding type variable X for t (the type variable for which t.wildcard was passed
         // as a type argument), in order to obtain the upper bound of X later on.
@@ -519,21 +520,15 @@ public class TypeSubstitutionUtils {
         // useful information.
         Type.TypeVar implicitUpperBoundTypeVariable =
             t.wildcard.bound != null ? t.wildcard.bound : t;
-        if (t.wildcard.kind == BoundKind.UNBOUND) {
-          Type upperBound = implicitUpperBoundTypeVariable.getUpperBound();
-          Type updatedUpperBound = upperBound.accept(this, other);
-          if (updatedUpperBound == upperBound) {
-            return updated;
-          }
-          updatedWildcard =
-              replaceUnboundedWildcardUpperBound(
-                  t.wildcard, implicitUpperBoundTypeVariable, updatedUpperBound);
-        } else {
-          Verify.verify(t.wildcard.kind == BoundKind.SUPER);
-          updatedWildcard =
-              restoreWildcardUpperBoundAnnotation(
-                  t.wildcard, implicitUpperBoundTypeVariable, other);
+        Type upperBound = implicitUpperBoundTypeVariable.getUpperBound();
+        Type updatedUpperBound = upperBound.accept(this, other);
+        if (updatedUpperBound == upperBound) {
+          return updated;
         }
+        updatedWildcard = TYPE_METADATA_BUILDER.createWildcardType(t.wildcard, t.wildcard.type);
+        updatedWildcard.bound =
+            TYPE_METADATA_BUILDER.createDetachedTypeVar(
+                implicitUpperBoundTypeVariable, updatedUpperBound);
       }
       if (updatedWildcard == t.wildcard) {
         return updated;
