@@ -510,19 +510,30 @@ public class TypeSubstitutionUtils {
           return updated;
         }
         updatedWildcard = TYPE_METADATA_BUILDER.createWildcardType(t.wildcard, updatedBound);
-      } else if (t.wildcard.kind == BoundKind.UNBOUND) {
-        Type.TypeVar formalTypeVariable = t.wildcard.bound != null ? t.wildcard.bound : t;
-        Type upperBound = formalTypeVariable.getUpperBound();
-        Type updatedUpperBound = upperBound.accept(this, other);
-        if (updatedUpperBound == upperBound) {
-          return updated;
-        }
-        updatedWildcard =
-            replaceUnboundedWildcardUpperBound(t.wildcard, formalTypeVariable, updatedUpperBound);
       } else {
-        updatedWildcard =
-            restoreWildcardUpperBoundAnnotation(
-                t.wildcard, t.wildcard.bound != null ? t.wildcard.bound : t, other);
+        // t.wildcard is either unbounded or lower bounded (with super).  We want to find the
+        // corresponding type variable X for t (the type variable for which t.wildcard was passed
+        // as a type argument), in order to obtain the upper bound of X later on.
+        // Normally, X is stored in t.wildcard.bound.  If it is unavailable, we fall back on using
+        // the captured type t itself, as its own upper bound (t.getUpperBound()) could provide
+        // useful information.
+        Type.TypeVar implicitUpperBoundTypeVariable =
+            t.wildcard.bound != null ? t.wildcard.bound : t;
+        if (t.wildcard.kind == BoundKind.UNBOUND) {
+          Type upperBound = implicitUpperBoundTypeVariable.getUpperBound();
+          Type updatedUpperBound = upperBound.accept(this, other);
+          if (updatedUpperBound == upperBound) {
+            return updated;
+          }
+          updatedWildcard =
+              replaceUnboundedWildcardUpperBound(
+                  t.wildcard, implicitUpperBoundTypeVariable, updatedUpperBound);
+        } else {
+          Verify.verify(t.wildcard.kind == BoundKind.SUPER);
+          updatedWildcard =
+              restoreWildcardUpperBoundAnnotation(
+                  t.wildcard, implicitUpperBoundTypeVariable, other);
+        }
       }
       if (updatedWildcard == t.wildcard) {
         return updated;
