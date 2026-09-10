@@ -1,12 +1,39 @@
 package com.uber.nullaway.jspecify;
 
 import com.google.errorprone.CompilationTestHelper;
+import com.google.errorprone.bugpatterns.PreferTestParameter;
+import com.google.errorprone.scanner.ScannerSupplier;
+import com.uber.nullaway.NullAway;
 import com.uber.nullaway.NullAwayTestsBase;
 import com.uber.nullaway.generics.JSpecifyJavacConfig;
 import java.util.List;
 import org.junit.Test;
 
 public class BytecodeGenericsTests extends NullAwayTestsBase {
+
+  @Test
+  public void unboundedWildcardWithNonNullFormalBoundAfterTypeInspection() {
+    // PreferTestParameter inspects every single-parameter method with Types.unboxedTypeOrType(),
+    // which makes javac expose a different bound for the source wildcard to NullAway.
+    CompilationTestHelper.newInstance(
+            ScannerSupplier.fromBugCheckerClasses(PreferTestParameter.class, NullAway.class),
+            getClass())
+        .setArgs(
+            JSpecifyJavacConfig.withJSpecifyModeArgs(
+                List.of("-XepOpt:NullAway:AnnotatedPackages=com.uber")))
+        .addSourceLines(
+            "Test.java",
+            """
+            package com.uber;
+            import com.uber.lib.generics.SeparatelyCompiledQueue;
+            class Test {
+              static long producerIndex(SeparatelyCompiledQueue<?> queue) {
+                return SeparatelyCompiledQueue.producerIndex(queue);
+              }
+            }
+            """)
+        .doTest();
+  }
 
   @Test
   public void basicTypeParamInstantiation() {
