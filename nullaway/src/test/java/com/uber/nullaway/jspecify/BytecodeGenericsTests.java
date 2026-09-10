@@ -7,12 +7,15 @@ import com.uber.nullaway.NullAway;
 import com.uber.nullaway.NullAwayTestsBase;
 import com.uber.nullaway.generics.JSpecifyJavacConfig;
 import java.util.List;
+import org.junit.Assume;
 import org.junit.Test;
 
 public class BytecodeGenericsTests extends NullAwayTestsBase {
 
   @Test
   public void unboundedWildcardWithNonNullFormalBoundAfterTypeInspection() {
+    // PreferTestParameter is compiled for Java 21 and cannot be loaded by the JDK 17 test task.
+    Assume.assumeTrue(Runtime.version().feature() >= 21);
     // PreferTestParameter inspects every single-parameter method with Types.unboxedTypeOrType(),
     // which makes javac expose a different bound for the source wildcard to NullAway.
     CompilationTestHelper.newInstance(
