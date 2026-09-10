@@ -1,25 +1,29 @@
 package com.uber.nullaway.jspecify;
 
+import static com.google.errorprone.BugPattern.SeverityLevel.SUGGESTION;
+import static com.google.errorprone.matchers.Description.NO_MATCH;
+
+import com.google.errorprone.BugPattern;
 import com.google.errorprone.CompilationTestHelper;
-import com.google.errorprone.bugpatterns.PreferTestParameter;
+import com.google.errorprone.VisitorState;
+import com.google.errorprone.bugpatterns.BugChecker;
+import com.google.errorprone.matchers.Description;
 import com.google.errorprone.scanner.ScannerSupplier;
+import com.google.errorprone.util.ASTHelpers;
+import com.sun.source.tree.MethodTree;
+import com.sun.tools.javac.code.Type;
 import com.uber.nullaway.NullAway;
 import com.uber.nullaway.NullAwayTestsBase;
 import com.uber.nullaway.generics.JSpecifyJavacConfig;
 import java.util.List;
-import org.junit.Assume;
 import org.junit.Test;
 
 public class BytecodeGenericsTests extends NullAwayTestsBase {
 
   @Test
   public void unboundedWildcardWithNonNullFormalBoundAfterTypeInspection() {
-    // PreferTestParameter is compiled for Java 21 and cannot be loaded by the JDK 17 test task.
-    Assume.assumeTrue(Runtime.version().feature() >= 21);
-    // PreferTestParameter inspects every single-parameter method with Types.unboxedTypeOrType(),
-    // which makes javac expose a different bound for the source wildcard to NullAway.
     CompilationTestHelper.newInstance(
-            ScannerSupplier.fromBugCheckerClasses(PreferTestParameter.class, NullAway.class),
+            ScannerSupplier.fromBugCheckerClasses(TypeInspectionChecker.class, NullAway.class),
             getClass())
         .setArgs(
             JSpecifyJavacConfig.withJSpecifyModeArgs(
@@ -36,6 +40,29 @@ public class BytecodeGenericsTests extends NullAwayTestsBase {
             }
             """)
         .doTest();
+  }
+
+  /**
+   * Performs the type inspection that exposes javac's mutable wildcard bound to NullAway.
+   *
+   * <p>This is the relevant behavior reduced from Error Prone's {@code PreferTestParameter}
+   * checker. Calling {@link com.sun.tools.javac.code.Types#unboxedTypeOrType(Type)} searches the
+   * parameter type's supertypes and can recontextualize a shared wildcard's {@code bound} field.
+   */
+  @BugPattern(summary = "Inspects single-parameter method types", severity = SUGGESTION)
+  public static final class TypeInspectionChecker extends BugChecker
+      implements BugChecker.MethodTreeMatcher {
+
+    @Override
+    public Description matchMethod(MethodTree tree, VisitorState state) {
+      if (tree.getParameters().size() == 1) {
+        Type parameterType = ASTHelpers.getType(tree.getParameters().get(0));
+        if (parameterType != null) {
+          state.getTypes().unboxedTypeOrType(parameterType);
+        }
+      }
+      return NO_MATCH;
+    }
   }
 
   @Test
