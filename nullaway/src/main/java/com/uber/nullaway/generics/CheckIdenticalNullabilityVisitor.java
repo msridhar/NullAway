@@ -93,11 +93,11 @@ public class CheckIdenticalNullabilityVisitor extends Types.DefaultTypeVisitor<B
     // arguments. This avoids relying on WildcardType.bound, which javac can mutate while computing
     // an unrelated supertype.
     List<Type> capturedLhsTypeArguments =
-        config.handleWildcardGenerics()
+        config.handleWildcardGenerics() && hasDirectImplicitWildcard(lhsTypeArguments)
             ? types.capture(lhsType).getTypeArguments()
             : lhsTypeArguments;
     List<Type> capturedRhsTypeArguments =
-        config.handleWildcardGenerics()
+        config.handleWildcardGenerics() && hasDirectImplicitWildcard(rhsTypeArguments)
             ? types.capture(rhsTypeAsSuper).getTypeArguments()
             : rhsTypeArguments;
     List<Type> correspondingTypeVariables = lhsType.tsym.type.getTypeArguments();
@@ -131,6 +131,23 @@ public class CheckIdenticalNullabilityVisitor extends Types.DefaultTypeVisitor<B
     // NOTE: I don't think we need to use rhsTypeAsSuper here, since the enclosing type of rhsType
     // should be converted properly via another call to asSuper when we recurse.
     return lhsType.getEnclosingType().accept(this, rhsType.getEnclosingType());
+  }
+
+  /**
+   * Returns whether the type arguments contain a direct wildcard with an implicit upper bound.
+   *
+   * <p>Explicit {@code extends} wildcards do not need capture conversion because their upper bound
+   * is stored directly on the wildcard. Captured wildcards are type variables rather than direct
+   * wildcard arguments and already carry their contextual bounds.
+   */
+  private static boolean hasDirectImplicitWildcard(List<Type> typeArguments) {
+    for (Type typeArgument : typeArguments) {
+      if (typeArgument instanceof Type.WildcardType wildcardType
+          && wildcardType.kind != BoundKind.EXTENDS) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /** Check identical nullability for every type in the intersection */
