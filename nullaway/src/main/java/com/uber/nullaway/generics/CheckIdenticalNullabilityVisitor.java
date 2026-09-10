@@ -89,9 +89,10 @@ public class CheckIdenticalNullabilityVisitor extends Types.DefaultTypeVisitor<B
     }
     List<Type> lhsTypeArguments = lhsType.getTypeArguments();
     List<Type> rhsTypeArguments = rhsTypeAsSuper.getTypeArguments();
-    // Capture conversion derives wildcard bounds from the declaration and the current type
-    // arguments. This avoids relying on WildcardType.bound, which javac can mutate while computing
-    // an unrelated supertype.
+    // Where appropriate, we compute a fresh capture conversion of the type and save the new
+    // captured type arguments.  The resulting capture variables are ensured to have a correct upper
+    // bound.  In contrast, the WildcardType.bound field is unreliable, as javac can mutate it while
+    // computing an unrelated supertype.  See https://github.com/uber/NullAway/issues/1840.
     List<Type> capturedLhsTypeArguments =
         config.handleWildcardGenerics() && hasDirectImplicitWildcard(lhsTypeArguments)
             ? types.capture(lhsType).getTypeArguments()
@@ -104,8 +105,6 @@ public class CheckIdenticalNullabilityVisitor extends Types.DefaultTypeVisitor<B
     // This is impossible, considering the fact that standard Java subtyping succeeds before
     // running NullAway
     if (lhsTypeArguments.size() != rhsTypeArguments.size()
-        || lhsTypeArguments.size() != capturedLhsTypeArguments.size()
-        || lhsTypeArguments.size() != capturedRhsTypeArguments.size()
         || lhsTypeArguments.size() != correspondingTypeVariables.size()) {
       throw new RuntimeException(
           "Number of types arguments in " + rhsTypeAsSuper + " does not match " + lhsType);

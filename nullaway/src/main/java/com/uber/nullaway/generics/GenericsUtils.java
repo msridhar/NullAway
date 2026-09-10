@@ -104,9 +104,9 @@ public class GenericsUtils {
    * <p>{@link Type.WildcardType#bound} is mutable. javac can reuse a wildcard while constructing a
    * supertype and change that field to the supertype's formal type variable, leaving it
    * inconsistent with the parameterized type in which the wildcard was originally written. Capture
-   * conversion recomputes the bound from the declaration and current type arguments. A stored bound
-   * whose symbol still matches {@code correspondingTypeVariable} remains useful as an annotation
-   * source, including for detached bounds created by NullAway.
+   * conversion recomputes the bound from the declaration and current type arguments. Explicit
+   * nullness annotations restored during type substitution are taken from the captured type
+   * argument itself, so this method does not depend on the wildcard's mutable stored bound.
    *
    * @param wildcardType the direct wildcard type argument
    * @param capturedTypeArgument the corresponding type argument after capture-converting the
@@ -124,19 +124,21 @@ public class GenericsUtils {
       VisitorState state,
       Config config,
       Handler handler) {
-    if (wildcardType.kind == BoundKind.EXTENDS
-        || !(capturedTypeArgument instanceof CapturedType capturedType)) {
+    if (wildcardType.kind == BoundKind.EXTENDS) {
       return wildcardUpperBound(wildcardType, correspondingTypeVariable, state, config, handler);
     }
+    Verify.verify(
+        capturedTypeArgument instanceof CapturedType,
+        "capture conversion did not capture wildcard %s",
+        wildcardType);
+    CapturedType capturedType = (CapturedType) capturedTypeArgument;
     Type upperBound = capturedType.getUpperBound();
-    if (wildcardType.bound != null
-        && wildcardType.bound.tsym.equals(correspondingTypeVariable.tsym)) {
-      // Preserve explicit annotations on a valid substituted or NullAway-detached bound. Do not
-      // copy annotations from a bound that javac recontextualized for an unrelated supertype.
-      upperBound =
-          TypeSubstitutionUtils.restoreExplicitNullabilityAnnotations(
-              wildcardType.bound.getUpperBound(), upperBound, config);
-    }
+    // A substituted capture can carry an explicit annotation from a type-variable use (for
+    // example, @NonNull V) that javac's structural upper bound does not retain. Restore that
+    // annotation from the capture itself rather than consulting the wildcard's mutable bound.
+    upperBound =
+        TypeSubstitutionUtils.restoreExplicitNullabilityAnnotations(
+            capturedTypeArgument, upperBound, config);
     // If capture conversion substituted a dependent bound (for example, U extends T becoming
     // String), the substituted type supplies its own nullability. Declaration-level defaults for U
     // apply only when its declared upper bound is still the bound being interpreted.
